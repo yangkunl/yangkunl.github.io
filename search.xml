@@ -1,0 +1,885 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search>
+  <entry>
+    <title>Accelerator_learn</title>
+    <url>/posts/68ef64cf/</url>
+    <content><![CDATA[<h1 id="Accelerator-学习"><a href="#Accelerator-学习" class="headerlink" title="Accelerator 学习"></a>Accelerator 学习</h1><h2 id="Accelerator"><a href="#Accelerator" class="headerlink" title="Accelerator"></a>Accelerator</h2><p>其是Huggingface 下的一个训练加速库，其能够仅通过四行代码既可以在任何分布式配置上运行相同Pytorch代码的库。</p>
+<p>例如</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">+ <span class="keyword">from</span> accelerate <span class="keyword">import</span> Accelerator</span><br><span class="line">+ accelerator = Accelerator()</span><br><span class="line"></span><br><span class="line">+ model, optimizer, training_dataloader, scheduler = accelerator.prepare(</span><br><span class="line">+     model, optimizer, training_dataloader, scheduler</span><br><span class="line">+ )</span><br><span class="line"></span><br><span class="line">  <span class="keyword">for</span> batch <span class="keyword">in</span> training_dataloader:</span><br><span class="line">      optimizer.zero_grad()</span><br><span class="line">      inputs, targets = batch</span><br><span class="line">      inputs = inputs.to(device)</span><br><span class="line">      targets = targets.to(device)</span><br><span class="line">      outputs = model(inputs)</span><br><span class="line">      loss = loss_function(outputs, targets)</span><br><span class="line">+     accelerator.backward(loss)</span><br><span class="line">      optimizer.step()</span><br><span class="line">      scheduler.step()</span><br></pre></td></tr></tbody></table></figure>
+
+<p>其中<code>+</code>代表需要在正常PyTorch代码中添加的代码。Accelerate 是根据<code>torch_xla</code>和<code>torch.distributed</code>构建的。Accelerate将现有的代码库转换利用为DeepSpeed，执行完全分片的数据并行，并自动支持混合精度训练！</p>
+<blockquote>
+<p>[!tip]</p>
+<p>DeepSpeed是由微软开发的，关于ZeRO的实现，主要是通过对模型进行分区来达到更高效的训练。Accelerate在训练阶段集成了DeepSpeed ZeRO的全部功能，包括ZeRO阶段1、2/3以及ZeRO-Offload、ZeRO-infinity（ps：deepspeed我之前也不清楚，这是第一次了解，其好像是大模型训练的基石，找个时间重新学习一下）</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241218191241819.png" alt="image-20241218191241819"></p>
+<p><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-zero.png" alt="ZeRO Data Parallelism"></p>
+</blockquote>
+<figure class="highlight shell"><table><tbody><tr><td class="code"><pre><span class="line">accelerate launch {my_script.py}</span><br></pre></td></tr></tbody></table></figure>
+
+<h3 id="Accelerate-Tutorials"><a href="#Accelerate-Tutorials" class="headerlink" title="Accelerate Tutorials"></a>Accelerate Tutorials</h3><p>使用accelerate简单的适配现有的PyTorch代码，并轻松上手：</p>
+<p>原始训练代码</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">device = <span class="string">"cuda"</span></span><br><span class="line">model.to(device)</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> batch <span class="keyword">in</span> training_dataloader:</span><br><span class="line">    optimizer.zero_grad()</span><br><span class="line">    <span class="built_in">input</span>, targets = batch</span><br><span class="line">    inputs = inputs.to(device)</span><br><span class="line">    targets = targets.to(device)</span><br><span class="line">    outputs = model(inputs)</span><br><span class="line">    loss = loss_function(outputs, targets)</span><br><span class="line">    loss.backward()</span><br><span class="line">    optimizer.step()</span><br><span class="line">    scheduler.step()</span><br></pre></td></tr></tbody></table></figure>
+
+<h4 id="Accelerator-1"><a href="#Accelerator-1" class="headerlink" title="Accelerator"></a>Accelerator</h4><p>Accelerator 是将代码适配到Accelerate的主要类，需要向其提供分布式设置例如不同进程的数量和硬件类型，所有首先需要在代码中导入Accelerator类，并且用这个类创建一个实例如下：</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">form accelerate <span class="keyword">import</span> Accelerator</span><br><span class="line"></span><br><span class="line">accelerator = Accelerator()</span><br></pre></td></tr></tbody></table></figure>
+
+<p>由于Accelerator知道我们的代码使用的是那一个device，所有不要用：</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">device = <span class="string">"cuda"</span></span><br><span class="line">model.to(device)</span><br></pre></td></tr></tbody></table></figure>
+
+<p>而是使用</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">device = accelerator.debice</span><br><span class="line">model.to(device)</span><br></pre></td></tr></tbody></table></figure>
+
+<h4 id="准备PyTorch的对象"><a href="#准备PyTorch的对象" class="headerlink" title="准备PyTorch的对象"></a>准备PyTorch的对象</h4><p>为PyTorch对象包括model，optimizer，scheduler等等，主要是使用<code>prepare()</code>方法将model放在容器中（单个或者是多个GPU），将优化器和调度器都调整为<code>AcceleratedOptimizer</code>和<code>AcceleratedScheduler</code>，同时需要创建一个新的dataloder，这种dataloder能够在进程间分片。具体代码如下：</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">model, optimizer, training_dataloader, scheduler = accelerator.prepare(</span><br><span class="line">	model, optimizer, training_dataloader, scheduler</span><br><span class="line">)</span><br></pre></td></tr></tbody></table></figure>
+
+<h4 id="训练过程"><a href="#训练过程" class="headerlink" title="训练过程"></a>训练过程</h4><p> 首先在训练的循环中将<code>to(device)</code>删去，因为Accelerator 类的Dataloder会把这些数据放在正确的device上面，同时<code>backward()</code>也要替换为Accelerator的<code>backward()</code>，该方法能够自动缩放梯度并根据分布式设置（DeepSpeed 或Megatron）使用适当的<code>backward()</code>方法。将所有的组合起来，就与原训练代码有许多不同了：</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">device = accelerator.device</span><br><span class="line">model, optimizer, training_dataloader, scheduler = accelerator.prepare（</span><br><span class="line">	model, optimizer, training_dataloader, scheduler</span><br><span class="line">）</span><br><span class="line"><span class="keyword">for</span> batch <span class="keyword">in</span> training_dataloader:</span><br><span class="line">    optimizer.zero_grad()</span><br><span class="line">    <span class="built_in">input</span>, targets = batch</span><br><span class="line">    outputs = model(inputs)</span><br><span class="line">    loss = loss_function(outputs, targets)</span><br><span class="line">    accelerator.backward(loss)</span><br><span class="line">    optimizer.step()</span><br><span class="line">    scheduler.step()</span><br></pre></td></tr></tbody></table></figure>
+
+<h4 id="训练特性"><a href="#训练特性" class="headerlink" title="训练特性"></a>训练特性</h4><p>Accelerate提供额外的特性，例如梯度累积，梯度裁剪，混合精度训练，可以使用这些特性改善效果，具体如下：</p>
+<ol>
+<li><p>梯度累积</p>
+<p>梯度累积允许将小batch_size的梯度累积起来，相当于在更大的batch_size上面更新，可以克服内存限制，要使用这个特性，首先需要再Accelerator中指定gradient_accumulation_steps这个参数，并将accumulate()上下文管理器添加到脚本中，例如以下代码：</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">accelerator = Accelerator(gradient_accumulation_steps=<span class="number">2</span>)</span><br><span class="line">model, optimizer, training_dataloader, scheduler = accelerator.prepare（</span><br><span class="line">	model, optimizer, training_dataloader, scheduler</span><br><span class="line">）</span><br><span class="line"><span class="keyword">for</span> batch <span class="keyword">in</span> training_dataloader:</span><br><span class="line">    <span class="keyword">with</span> accelerate.accumulate(model):</span><br><span class="line">        optimizer.zero_grad()</span><br><span class="line">        <span class="built_in">input</span>, targets = batch</span><br><span class="line">        outputs = model(inputs)</span><br><span class="line">        loss = loss_function(outputs, targets)</span><br><span class="line">        accelerator.backward(loss)</span><br><span class="line">        optimizer.step()</span><br><span class="line">        scheduler.step()</span><br></pre></td></tr></tbody></table></figure>
+</li>
+<li><p>梯度裁剪</p>
+<p>梯度裁剪主要是为了防止梯度爆炸，Accelerate提供了clipgrad_value() 用于将梯度裁剪到最小和最大值。以及clipgrad_norm() 用于将梯度归一化到特定值。</p>
+</li>
+<li><p>混合精度</p>
+<p>混合精度使用较低的精度类型fp16来计算精度，需要首先在Accelerator中设置使用混合精度，然后使用<code>autocast()</code>上下文管理器：</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">accelerator = Accelerator(mixed_precision=<span class="string">"fp16"</span>)</span><br><span class="line"><span class="keyword">with</span> accelerator.autocast():</span><br><span class="line">    loss = complex_loss_function(outputs, target)</span><br></pre></td></tr></tbody></table></figure></li>
+</ol>
+<h4 id="保存和加载"><a href="#保存和加载" class="headerlink" title="保存和加载"></a>保存和加载</h4><p>可以使用Accelerate在训练完成保存和加载模型，也可以在训练的时候保存模型和优化器状态，用于恢复训练。</p>
+<ol>
+<li><p>模型</p>
+<p>在训练进程完成后，在保存之前首先使用unwarp_model（）方法解包模型，因为 prepare()方法已经将您的模型包装成适合分布式训练的正确接口。即在原始模型外部添加了额外的包装层。如果不进行解包，保存模型状态字典时会连同这些额外的包装层一起保存，这样就无法将权重正确地加载回基础模型中。同时应该使用<code>save_model</code>方法来解包和保存模型的checkpoints 。</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">accelerator.wait_for_everyone()</span><br><span class="line">accelerator.save_model(model, save_directory)</span><br></pre></td></tr></tbody></table></figure>
+
+<blockquote>
+<p>[!tip]</p>
+<p>对于来自transformers库的模型可以使用save_pretrained方法保存模型，以便使用from_pretrained方法重新加载</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">  &gt;<span class="keyword">from</span> transformers <span class="keyword">import</span> AutoModel</span><br><span class="line"></span><br><span class="line">  &gt;unwrapped_model = accelerator.unwarp_model(model)</span><br><span class="line">  &gt;unwrapped_model.save_pretrained(</span><br><span class="line"><span class="string">"path/to/my_model_directory"</span>,</span><br><span class="line">   is_main_process=accelerator.is_main_process,</span><br><span class="line">   save_function=accelerator.save</span><br><span class="line">  &gt;)</span><br><span class="line">  &gt;model = AutoModel.from_pretrained(<span class="string">"path/to/my_model_directory"</span>)</span><br></pre></td></tr></tbody></table></figure></blockquote>
+<p>加载保存的权重使用<code>load_state_dict</code>，代码如下：</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">unwrapped_model = accelerator.unwrap_model(model)</span><br><span class="line">path_to_checkpoint = os.path.join(save_directory,<span class="string">"pytorch_model.bin"</span>)</span><br><span class="line">unwrapped_model.load_state_dict(torch.load(path_to_checkpoint))</span><br></pre></td></tr></tbody></table></figure>
+</li>
+<li><p>state</p>
+<p>在训练过程中保存模型状态，优化器，学习率调度器等等，可以使用<code>save_state</code>和<code>load_state</code>方法来保存和加载模型状态。还可以使用<code>ProjectConfiguratin</code>类进行自定义保存状态和位置。任何其他需要储存的状态都可以使用<code>register_for_checkpointing</code>进行注册，以便进行保存和加载。</p>
+</li>
+</ol>
+<h3 id="执行进程"><a href="#执行进程" class="headerlink" title="执行进程"></a>执行进程</h3><p>在处理分布式训练系统时，管理跨 GPU 执行进程的方式和时间非常重要。有些进程比其他进程完成得更快，有些进程如果其他进程尚未完成则不应开始。Accelerate 提供了工具来协调进程的执行时间，以确保所有设备上的一切保持同步。</p>
+<ol>
+<li><p>执行一个进程</p>
+<p>有些代码只需要在<strong>特定机器</strong>上执行一次，例如打印日志或者是在主进程上显示一个进度条。有两种方式，一种是在语句中通过<code>accelerator.is_local_main_process</code>，例如：</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> tqdm.auto <span class="keyword">import</span> tqdm</span><br><span class="line"></span><br><span class="line">progress_bar = tqdm(<span class="built_in">range</span>(args.max_train_steps), disable=<span class="keyword">not</span> accelerator.is_local_main_process)</span><br></pre></td></tr></tbody></table></figure>
+
+<p>或者是在函数上用装饰器：</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line"><span class="meta">@accelerator.on_local_main_process</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">do_my_thing</span>():</span><br><span class="line">    <span class="string">"Something code done once per serve"</span></span><br><span class="line">    do_thing_once_per_server()</span><br></pre></td></tr></tbody></table></figure>
+
+<p>也可以在<strong>所有进程</strong>中都只执行一次，例如将模型上传到hub的时候。代码如下：</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> accelerator.is_main_process:</span><br><span class="line">    repo.push_to_hub()</span><br></pre></td></tr></tbody></table></figure>
+</li>
+<li><p>执行特定进程</p>
+<p>可以使用Accelerate只在特定进程或者local（local是指的是当前设备）进程索引上。具体来说，特定进程：</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line"><span class="meta">@accelerator.on_process(<span class="params">process_index=<span class="number">0</span></span>)</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">do_my_thing</span>():</span><br><span class="line">    <span class="string">"Something done on process index 0"</span></span><br><span class="line">    do_thing_on_index_zero()</span><br></pre></td></tr></tbody></table></figure>
+
+<p>本地进程索引：</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line"><span class="meta">@accelerator.on_local_process(<span class="params">local_process_idx=<span class="number">0</span></span>)</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">do_my_thing</span>():</span><br><span class="line">    <span class="string">"Something done on process index 0 on each server"</span></span><br><span class="line">    do_thing_on_index_zero_on_each_server()</span><br></pre></td></tr></tbody></table></figure>
+</li>
+<li><p>推迟进行</p>
+<p>当同时在多个 GPU 上运行脚本时，某些代码可能比其他代码执行得更快。在执行下一组指令之前，可能需要等待所有进程达到某个特定点。例如，在确保每个进程完成训练之前，不应该保存模型。为此，在代码中添加 wait_for_everyone()。这将阻止所有首先完成的过程继续，直到所有剩余的过程都达到相同的位置（如果在单个 GPU 或 CPU 上运行，则此操作没有效果）。</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">accelerator.wait_for_everyone()</span><br></pre></td></tr></tbody></table></figure></li>
+</ol>
+<h4 id="启动脚本"><a href="#启动脚本" class="headerlink" title="启动脚本"></a>启动脚本</h4><p>使用<code>accelerate launch</code>在命令行进行启动脚本，可以在运行之前使用<code>accelerate config</code>进行配置环境。</p>
+<figure class="highlight shell"><table><tbody><tr><td class="code"><pre><span class="line">accelerate launch {script_name.py} --arg1 --arg2 ...</span><br></pre></td></tr></tbody></table></figure>
+
+<p>由于这个命令行命令之后会调用torch的进程生成，所有可以在这里修改环境变量，例如：</p>
+<figure class="highlight shell"><table><tbody><tr><td class="code"><pre><span class="line"><span class="meta prompt_"># </span><span class="language-bash"><span class="keyword">for</span> cuda device:</span></span><br><span class="line">CUDA_VISIBLE_DEVICES="0" accelerate launch {script_name.py} --arg1 --arg2 ...</span><br><span class="line"><span class="meta prompt_"># </span><span class="language-bash"><span class="keyword">for</span> xpu device:</span></span><br><span class="line">ZE_AFFINITY_MASK="0" accelerate launch {script_name.py} --arg1 --arg2 ...</span><br></pre></td></tr></tbody></table></figure>
+
+<p>如果不在先设置accelerate config，可以在运行的时候进行修改如下：</p>
+<figure class="highlight shell"><table><tbody><tr><td class="code"><pre><span class="line">accelerate launch --multi_gpu {script_name.py} {--arg1} {--arg2} ...</span><br><span class="line">accelerate launch --multi_gpu {script_name.py} {--arg1} {--arg2} ...</span><br><span class="line">accelerate launch --multi_gpu --mixed_precision=fp16 --num_processes=2 {script_name.py} {--arg1} {--arg2} ...</span><br></pre></td></tr></tbody></table></figure>
+
+<p>还可以作为Python模块本身来启动：</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">python -m accelerate.commands.launch --num_processes=<span class="number">2</span> {script_name.py} {--arg1} {--arg2}</span><br></pre></td></tr></tbody></table></figure>
+
+<blockquote>
+<p>[!tip]</p>
+<p>也可以在CPU上运行代码</p>
+<figure class="highlight shell"><table><tbody><tr><td class="code"><pre><span class="line">accelerate launch --cpu {script_name.py} {--arg1} {--arg2}</span><br></pre></td></tr></tbody></table></figure></blockquote>
+<h4 id="配置Config"><a href="#配置Config" class="headerlink" title="配置Config"></a>配置Config</h4><p>通过accelerate config的命令进行创建，这些配置保存在Accelerate的缓存文件夹中的default_config.yaml文件中。该缓存文件夹位于</p>
+<p><code>/$HF_HOME/huggingface/accelerate</code>。也可以从自定义yaml的位置启动脚本</p>
+<figure class="highlight shell"><table><tbody><tr><td class="code"><pre><span class="line">accelerate launch --config_file {path/to/config/my_config_file.yaml} {script_name.py} {--arg1} {--arg2} ...</span><br></pre></td></tr></tbody></table></figure>
+
+
+
+<h2 id="Accelerate的一些其他工具"><a href="#Accelerate的一些其他工具" class="headerlink" title="Accelerate的一些其他工具"></a>Accelerate的一些其他工具</h2><ol>
+<li><p>模型内存估计器</p>
+<p>通过<code>accelerate estimate-memory</code>的CIL接口，这是Accelerate提供的工具用于估计使用显存大小。</p>
+<blockquote>
+<p>[!warning]</p>
+<p>但是当前这个工具只支持在timm和transformers上搜索模型。这个工具是在meta的device上加载模型，因此并没有在本地上下载权重和加载在内存上，</p>
+</blockquote>
+<p>具体使用方法:</p>
+<figure class="highlight bash"><table><tbody><tr><td class="code"><pre><span class="line">accelerate estimate-memory bert-base-cased</span><br></pre></td></tr></tbody></table></figure>
+
+<p>可以传递特定库的名称，例如timm或者transformers</p>
+<figure class="highlight bash"><table><tbody><tr><td class="code"><pre><span class="line">accelerate estimate-memory HuggingFaceM4/idefics-80b-instruct --library_name transformers</span><br></pre></td></tr></tbody></table></figure>
+
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241221232118737.png" alt="image-20241221232118737"></p>
+<p>实测有效，但是只能是transformers和timm的库，diffusers都不行。还有一个踩坑的点，由于模型实际上是加载在meta的device上的因此要联网，由于Huggingface被墙了，所有要先使用镜像。</p>
+</li>
+<li><p>模型量化</p>
+<p> 可以使用Accelerate用几行代码就能加载任何的PyTorch模型，用8位或4位精度。在使用之前首先需要安装bitsandbytes库。</p>
+<blockquote>
+<p>bitsandbytes库是一个轻量级的Python库可以使用高效的8-bit和4-bit量化技术进行推理和训练</p>
+</blockquote>
+<p>这里给的示例是GPT2，下载模型太耗时了，jump之后再学</p>
+</li>
+<li><p>实验追踪</p>
+<p>可以使用大量的实验追踪器，可以使用TensorBoard，WandB，CometML，Aim，MLFlow(不过我只使用过TensorBoard，其他可以以后试一下，看Stanford的课上推荐MLFlow还不错)。要在Accelerate中使用需要将特定的类型传递给Accelerate中的log_with参数，</p>
+<blockquote>
+<p>[!tip]</p>
+<p>需要将实验追踪器传递给Accelerate，我猜原因是由于如果使用多进程的话，如果不在Accelerate中使用实验追踪，那么大概率会由于进程冲突导致没法正确跟踪，所有Accelerate应该是把这些设置成主进程。</p>
+</blockquote>
+<p>具体的代码如下：</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> accelerate <span class="keyword">import</span> Accelerator</span><br><span class="line"><span class="keyword">from</span> accelerate.utils <span class="keyword">import</span> LoggerType</span><br><span class="line"></span><br><span class="line">accelerator = Accelerator(log_with=<span class="string">"all"</span>)</span><br><span class="line">accelerator = Accelerator(accelerator = Accelerator(log_with=<span class="string">"wandb"</span>)</span><br><span class="line">accelerator = Accelerator(log_with=[<span class="string">"wandb"</span>, LoggerType.TENSORBOARD]))</span><br></pre></td></tr></tbody></table></figure>
+
+<p>在实验开始前，使用<code>Accelerator.init_trackers()</code>来记录超参数</p>
+<figure class="highlight python"><table><tbody><tr><td class="code"><pre><span class="line">accelerator = Accelerator(log_with=<span class="string">"wandb"</span>)</span><br><span class="line">accelerator = Accelerator(log_with=[<span class="string">"wandb"</span>, LoggerType.TENSORBOARD])</span><br></pre></td></tr></tbody></table></figure>
+
+<p>等等</p>
+</li>
+<li></li>
+<li></li>
+</ol>
+]]></content>
+      <tags>
+        <tag>学习</tag>
+        <tag>工具</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>C++</title>
+    <url>/posts/5751eea2/</url>
+    <content><![CDATA[<div class="hbe hbe-container" id="hexo-blog-encrypt" data-wpm="输错了喔，再看就不礼貌了&#128527;." data-whm="OOPS, these decrypted content may changed, but you can still have a look.">
+  <script id="hbeData" type="hbeData" data-hmacdigest="597b0b95b09995e939b48b5a0c0ee74c4d67fe398fa135f3c5475ead563b3a7f">71ac3a7dbd8f1d370fe2d2f53c446fb9946ad5a1428b8cfedb38efac8dcc1f4fb13b375602467209f91419bf3257d3e0992f837cd27b629a4694637f1835b93f52ca21e4b07895afe5acee1d838c92cb067d786dcd0c553fb9fc9a1d90dbcf91410482e66853e52e282df710414ac342b0af2705cfaa47a22b3ecce09eaf031c50d791e5452bfb15ea60447975df55bb009d882d8ef2a905d6caaa213d4e4f4f7304750f9e0ec370217376be88cdc4e6e707ba87fbce37fdb8415ef6bcf946bbc76dd2f22c594a3a5cc5c72bc50b36f2c9abb436ec15c155a10a6e2cc67a18917d21aabd36c0d6be01d4ebdf2d5d154320b20fd4e3d368c700c65001712c65d65bc85a8b8c8bab605fe7bf1e6d73b488841129a11fda2dbda0efeb25e7fd855b8f97dec7cd39803ed944df46dbb4f43c44fb03226abfa5e65ae304323dcf68a34d6b8d4afd708b1ab695457990ae7bf764ec96b64b33c7aa920e4fad5ec1d426be83fa7fb047add716072816413e79c8c1c4207f9c9226a08dfae6acbd9acc9c795c82e3dc2c0e96bb5d5297892a54a2c9e31960a711bb41885dc63866f28b830847bde69b2b338bd3787e0e8799078726814ead58e5845d82a1612520624edd25c3dedc0e101da64dcc55eb037e841d258643427c6b359ff812c6ae634c918393695e9a7e2ad76353db3071386f5e7a5bc66963e9aeb16e5991e50ad8899b8e59746cea4ea1c534bf23f5873b1ba51d8857a2c794fb6bb003e69594621c26f40e5d4e656c9da9b43de799253c0b23e25de0a07c46ee371257a15ea66966353117888378642d7a73c51231568514c5b5e91be7c1d50e75d19d0cd4090b341500b2899cd8200aebc6c6244a74e8341d0fa8936dfc93068fbe5eeda1048989ed5327bce56777998a2219c74fd0f511df0bcf8903b4a652eb0ff2470dce1cade0f9bc5f0e98853b54db14b4aada300b025291da516769ded881333504bef304818d8fefc14572e0fe60e88a40788fdd67283cfababab754e5ee8fefe2e95f26dd5c10f8d8f15374968ece4960046ec1d578ee32317b75df326474882d0b9d0af1a71025362c15995aa40e2a4e56ee1f84fea3de90c46f284c2780e2ee0a7a96c43b4cf15c3a3841e56bd38f88c5b6fce617279d1adc341ef52c11204d857ac4a24cc35fea2023584658789f34d6fdbd645f9e8c4533238a179af314004398edaa9d0caeb129d7e2c39c7d387fa443094dfdbc8cb3ed1764203131ee6ddb0ef5dc1bb61ba9c1cc4d7c608238f09bfcf38cf5f6c8bb758ea9fad41be3701d65a97d2914f2be1569d34d56a94e10c24d2d6511f722ce5b9cce871e50d45b27f48ec9a55751abee8ef88ac6cff7f7409fdc8b13dd47f0981fd33e9309c1f328ce793889b5025efc90886aed9f38b97ef353a2b825a2d062d5ff5b18ed701debfc65b5de4af721ea88daca920d80923760de3d46112776a173b6a92a72d18e6750aaf49c07947858b7215ebd3a118817577a42f8d3365af6a1587a9e8de97565fb2d9c2b3cd4d11c87102a8f3b125e23177b597d35d1579f7f5b0008cb0eb8fd465229987e1df30fc2d236e55743a1d24c420efd65717cfe23294bb2ac760a5f32d260de96dfd22e4a830c23f36859ba111da35d561a6f44cf0dfb1e39b49c2857c81480ab16391e1bc465bd0c8d375ae07a8dc8d15fc6e3d5b2232888d1ea10bf49a603a807c26567399be52e51e40791d6fb3016aab5b1102cbe36cede842d9a68137d7e09fcd7ad5bcaaa2fbc0436736ae71eca13d9f3f58e71b03e494c10f51b8a5128d2cdb1fae2323d925e7d62fa163d9a817da26ac867975ca49de7ec5be6ec1bb92835b1a3c3a934c79c743a67721f133dfa49d8d8cfd44cb22c39f659ad6889dc4a54b9b3e89ed5a3f449a8b08eadd7001a1820890ad9589bc02cfb440e02c630f26b5d42767cd551cd56ebf29a0947dd535d0c4ceb03821ca4d36135dc36f9e28f7ade219f1aa898fb6ecfb3104d369e6852b619b8d9384821ab4f28fbc57973d726a14d34bb7f58171efcdc0f2c13ec19f9be243de233a8e4137d77f71f7c3de9c410b45d142bdd871cece5ab167b6e7667f9c68c62372917386856e980eb96421b5b06e599ca9868dba351307693279de9f5fa817aeb40e12044331562b69eb70a0fe38a8e6dc01e1b6c6537360c61ba6aa1ac29b3170cc75a24eaff7d473b5862e583bb38e0602aef9aa231ecbe8e9edee500a34fd9ef6c6106e7125cd590258781b1610e39957f371949b1ca5f0d4e98901b1618625fd1bbc7f893175f0ae2762f2a7b41a6117bd2c2e0667ce72c9df2d01a5372e629e9bf882007a7749fed993883fd534d9e124b3b5fcd41eacb2e48a7cc8668d2f0a61a4e02f2e449cde557b2d9551c5bd38f42ad25c48d21e246afbc875e0623bed20da7dbdc2181d8d7209507c7a91a1efe155be64b3838a31b6276dc8cfd7a940c7b10dbfb2a4f331f2db8b1b1d6873ab9121eaf3b01135672b0291a326f6713e97d1673f8e712898fa22c1f8048d4446bb36134dc5b74d3d506e22c09ace8c398a3aea6134be2e20dfafb26b34250072080fc0541c1bcb07dba60b05b97607754ceab8c745196046f6a8e745d22bd41821f8e737f0efd60765041d6213b958095eaf75e96a6443a991b739366339ebb10a2519cb5601eb7fdf0c7610af25af55b7f21e6f81bfdfb7ddd5c03ce9b676173b233c3870d457c2cb420a62063de2ddd73e30c055f02905509bd8cbb5873b78907041ea6538f06e833c037be4745b0fe2d8f447a8e0d717092757218ce25baaa1d6138de41927b30a8bf0f9f2bed9ae9a1b1f47a354776e6d451200465825878e8764e86820a8ecaad6c4550de84f0b593a7ef7c58bc1075e10a1d39b2444af3496b5ef49e3e0373416eeaace39bf79f93fc43d195d79fd8c7d209bed3ab770900ba0778833ad107e46cf61a037813ef69d360c67a682a4b2872c493489487a8e50735aeba94a652ecde8ff03a843b78de6495b0bebb6a26521e77eb930302279667636f568123219bd8f40b6e5618f5b3bc7ba5cf0803540134a9edaa14f91d65c353d0ce4fa77c686fae64798d203a8ea9845ad0fadd68afdbed0b5218a62e95aa633f0a6e58ba5e492db500af134f5148fb0c30376f82bcb5eaa99796ea7d3e04224c773c8afa778b353cd4a0371c6f436cc8699a493708c5aa659f1ac32296f2a6589d7524b5055d49632d89b02c312e1e5e54dc3e80f2de2b64fdfe5e0a5ba5ada06e81c0945c5757e606568d09bacbf23f1e5305107d516f908da673b9741dc3313dec2c7e7501a77c2404ea1ea09e3add8cea84890352e337a9a9eab32725ffc6c7fdf881374f9feb92d945c795ec2bf3e1dbb2f69a7d5eef0331edbf0e2c3c1a66e74319f7b7cbec0898a95c0f886d65b0cac0e112df36f80f7045f949dddd09f28c64952a782cd47751c794eba6a84d7f78020d99e619ee55d934bd52b32bcc927e67eacf7eb3a18787a4a81803e8bc719cfb32ce065b457128caa8a672ecec57803653fe73a5c5a4caa4bdd5030cfa2cb4a15f1b4fb22c489795014220a0eb1164fb4ba6c3b1b5e5e03ab3aad3c694347281f3f2f9595ac5a5edc9eb20fb64fb574de54ffdf9f3eda26a6d66dcf40d413e4186507f2ab990ff610e98fb323b8bb72eac549563041e134cdee3fd3d8211a0c5eb60d902281fdd9c8f8c24ca57d25adb17327ca7fc6c47aff1b9adb63a63aa9be40f669ce1b2c5156c0bc086859dcf4eba1d44278290e88075f496a9bedfe0feb22c6b1d91a737585f79bfeeb18a7794d4d5691a7eda9d558c423654bc4c52691993a282e39d0545b8e08504045c54b50d3fe17d24ccc5b4bcedcfc4806ae4f3b97704e41f886a04dd46ac779b58cc2154b09cf7e7be88757b977cf4c259d4365d7279bda78bffe22582bd4a20cd6798c28895d3048297b5ce5b9566e5ee893b3c121371847c49edac7cfc6c69ccc3a167ec3e7e4bca5335c8a17f76edeeab9253b677944acc8bcfb1a8233062fbe9520086b84d9e6007323c77e2313881bb6b6092c2eae52b8e3b39e760145d32e358a875efceaddb4bfe6e8a68d88a96e20afadcb200506095bd662ad8ccd34a7015d74d6708b72a6c9ecc4a8369e456ad6873aff04d6986c3fc380f3b5b76698d33322bff260f44436a171eaf6df8315aa35401600a583716c3609ff4ae074aa9b66e986ad613c9bf160cd6a4733bfae6825f21fc88b5b29200ae20633dade22dede50194b0e6ea1d42f3e2eef47ca9b003b92a426296a1f63711aeb93b625494e0b8d1907e51cffb79b04567b27e466bf45a87e25766162eb2e274df9efaf2a3fc9d9b55449c01f4f518df0685e31b108756f3db8368abe107efa3a7e357cca1cbe35f657fcb8f6e82804b45e40c8d4d336c21510d26e570752d67e31bd4f4eac4eddb13d75a2e49b98e3096112abd6e4e7cfc08078682fd525e87cf15512bd7d6ca3a4cd0ee5dae6aa3789a5235e2513ca194bb55b5ccd06143e1d9acfeaead8a72bbee4018bda081239d07b18305e858789731fd500b035513472f3e6c611d8877c58151e0801efd7074eb03fc0de85ee1400287a1c7bc0aa312050191f4d541ab008e4d59affe65dec9b14a9dd0d6676eea74312d9004acea1bc6ae5c0fd8077fd6a1a63d92da91402b20023724b2cbdd2fe10e525533ce8af37c2e26b33afe328d64369d2648893753a065212599c29e962c1752969a0b01e5d01c966b17ca0ac05694514b5dbe0859116c30f33f98f9dc79fb3964ccfc45b230ec665e637f582bcf8b595def2970ba2c621af0fdf5df4d8760aaed8a7235b7c813fcdd74d57180251d22c0d4a1ba05964abc017175ccb8210239e2237f279b457fbca9a5efb26ecc3702d9c666d4afdd086140bb9c769ed63722dece4299c0e92b723fba9676d87272d1e2080b0dcd136565b6f1b133d76d6ce5128c7e7027e803b600d74b8715aec97d43371eda57078b56967cc61b00c6d0a1e9b77e0c2c9bb8788cb0b5c260375136ddb0868120c2767a6ae60dd9f15f045a762949d5bf1069809b7f3b29b5dda15e9997eabb63569f0df2353222a3bed0c023eb18a1dcdbf76605f112adf652f8ac4abce04ba5c87d51434e54f210c3f4be1e8b12986292949e23bb555d2c8b0c891033494f5395718eee9fcd8976619beeaf294a4f015d68b7e3a250908909a8947215a0f4b06cdc4d126f941e0f419071b3ca5e3b3da5a2e5daa61d9e71d9cca96828b7c466921283a10afa71cac4d7662aebab1f58663d52ebb6a0f9ad98fab1fb745c73a88546e34fd49aa55535180c5fbf1d6883d48786500bdfe98237fe6cf7c0267745e3ef529d807bd833bb51a6c567e27fc0233dc1d9d10e7ffb54d0d790c9707eb2ac539759622f6f3f298fe67139f7ee6a207dabf93cadfb6408f83670d5d30f88ed1b84bd8e0b0b56e23c3208afa852e8564da5610268989e8d666684ab6823a931b9066b22bc092c9859622f6bbf5fce54f2a51ff28671d46873d2b3ecd4d7db7cc1ad6c2c38c7912eeecefb8f0af89f03504fd6f6e3f893949a6f3a6af4163ae40807c6b157909d9dbb3896e09f020b543806c143694df010191e75a2949b6a9d02b85f34183d8e0fba83f595c40d0a8bc1c5767481fc4da2310c4fce2823172533bb094b2fb2e83e7a389a9b802853942a88004a93c9c06aeb6ca093d70eef29558f5705289993fcf0b3e48e03adfd61a9dcea4d33c6338f94cd897e2219718dfb8a51cafd857134c7689a9ea1534371622b4eed92acc2cf64c0aadb2d688e6c928a04edaaf189ee76022f8fbb3e646ea049f4eae136973bb0484505d1325e9572acc489186d1643e1bab9bc542100da383a0151017773006580b1856fef1b54906fe5b6e2899e1e53e6d8847b6d0e55c048883cd9d3536cf1afae46c7f9a38a181bee595cc25e2c76002359723d46579e82d52a7ad8365917f91db96e9c29a7470495944e63e96e5d476789a24b646ec9f5f7023b634717e215f7c93cbfbcb8bb41d5e7bb9c98f890cc1936b059376d343704ed725cdd9180f37f42955b6625a18a36b57b98063d605086abee7364ad6cac2f128ccabac42ccb3fce6e79275d0d1fae538cce315544cb80daf6a6121ad4e58e76a98461fb7054a083be025f0fd4c204f41bd9d2d2e2bfa9d6d7bf0a3015c1197b77173af50b6e82edfc5c179fb1b1dbab373cd33261f47f39a07d6b45f94f1ab7ad84357275721dbd2a0f2ec4142f9fcb7cd940cc61f313d26ecf5d89aa151dd06a11d566dc76bfa0e5af028bcec7a2dcf4acfefa64b31d93e89a970ff25a1fc4d6304a168356c2ed3dd608c211aefe9cdbdae729e7fae50b91847edaeded65292f5888a775aa43bdc32998c7cd8c1da16822fc310d99bd05114a8886c0ebc44a775aecc66aebce25ad3a28d44a43514d750d0ee3570f64204a5f01c6ca2157124452af9e9e36baf00a5ff1bb498bf11a195667bf3f6aaeee3d49e2890a50a4c6d995a6410962a0bd39c261053bc407ff75dece76a94e5cc388c401a3d438c86789e183c0f440d53ac93374e63bb57631b70d060499e53bc3b72d735ed7ee9b2862d3bada0e552010cb826ce012c60b5822e77661d948f397a0add3a3cf0ed847ce94d441801dcce931680b40710592c43a40734f78cca2bb6404d72d0ef9543030bc4961cc261ef6dd67adf06d7d960c8dc6c1adf66f33173222036a3e99240383f2d0475a608fa96cfb838bc0f0acc583da4b6c3c9faed508dd4c524d3cec9e5a2f3ed00c39e7ede73331a73104e74dfa2067feceb09f375e5eacf66b891a7797125024d4cd17352eff3aa752210a4cc8f7be79264de03438529dfd2917c4287bf70a454feeb9bc620035d0e87639d278e90d58864bdd8b29276ede446476e138afe6aee7ccfdbe4108cd364e74c77c1c3c75a541eb9673cd2a8fe8fd95a4e4b32b498be4e746673202d9c0b31f15d82b2398eaab550254b1c14516c8190e69ca6a51345085e4166ccf196998bec0c2d0e3861716928c667260df6f2740b81226553a6451c8e52c376975b0f6ababb50e2e483e1e7693fef6a2171984b40074186df86924e5da2226a0599f3c690e2dee29cee4f8715ca240ba7a2b79efd2349fe7c1b4f2dc8dcb5f086ec11c1ad56dab3deff8a2de0f30b9eecabf835e9fb33bddb9e2f6267fe5b3d13beab92fc69c3d8bc32220e90982254bda9f2777ff8c5dd32bd0ed26dffb932792adb5ee6bfe957c6a1b2b5e2c182f5935867ad11cc49063c284bc8f3156a63f86ca69b61210b852e7b0bf4eca419caa05cdcd52affca82cfb303f5c70913364409bf288d255655fad30f5e41d2abb1af3c6887ad3bc6139ba5010903ab061c05013805f71121c2b6f24127d52aa135c0386e9b56a9a72ce486c1130291c05511aaf410ed09939f07c1d5a79ad635a8371a5aa88d1d3</script>
+  <div class="hbe hbe-content">
+    <div class="hbe hbe-input hbe-input-default">
+      <input class="hbe hbe-input-field hbe-input-field-default" type="password" id="hbePass">
+      <label class="hbe hbe-input-label hbe-input-label-default" for="hbePass">
+        <span class="hbe hbe-input-label-content hbe-input-label-content-default">Hey,你需要输入密码.&#128512</span>
+      </label>
+    </div>
+  </div>
+</div>
+<script data-pjax src="/lib/hbe.js"></script><link href="/css/hbe.style.css" rel="stylesheet" type="text/css">]]></content>
+      <categories>
+        <category>学习</category>
+      </categories>
+      <tags>
+        <tag>学习</tag>
+        <tag>C++</tag>
+        <tag>笔记</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>CS基本素养</title>
+    <url>/posts/fc25f2a7/</url>
+    <content><![CDATA[<div class="hbe hbe-container" id="hexo-blog-encrypt" data-wpm="输错了喔，再看就不礼貌了&#128527;." data-whm="OOPS, these decrypted content may changed, but you can still have a look.">
+  <script id="hbeData" type="hbeData" data-hmacdigest="5c8756393b5e818ce6472a16e0b153c281d8c9f550fb31ab40cc02d62d1e5b07">71ac3a7dbd8f1d370fe2d2f53c446fb979694eb198f296ecc7559d07187131dd110feb1b9ffde19b2f323635b9986592037b853f79e089b5082daa671d0b071bf070b5cab7540ccbc171c9f75f3bc2ee8a691f8cf02b084839037956530929c8ffab0e960826e726254fdb51d798388162468cf2190da7eba6788d0fa8c7a14943c306479bf981e5ed040768c22c675713a022d51e96c2816babd706b7081aa4030a9e0b369d1600538451f60452e7ca680b6b5be9815d52c3bdfd57c6590d934a6666ce6f711ce2ab2f2d60ffe68c9a2dce8b82bfc66f3c3d7e887b7121206cc4ef82f6bcd6d6ad13b7248e70877ec3d26564dcd861128e249526eaba7c5d92d079403445591a98227ccfb60e71dd4e3a56e96843f6d9606e26de0a07dec7e7400d93e828d3b5461e42a6302536f76981d09aa68a6c367350a65eca54cc4f10db1f4a14b492fd15152fbe889837709af39b01587faf38a410babc34ff289d0ede6b50aa2dae6613b8cac7c4fac03955ce5046a52ab7d6ea9516efa1d214685dd88c124444ac1bfca89651bd9f3a8a3d7c1354524dbef3a0c54766f66e8b604134f2964404a87011c4a8f6cc544b9b9645f22632bbd57fd7e95ecaa6855aadd6f4250b13bc6027fab579ef126ff3c1539d51a79606df9f44ce59a1148a8ad0fb7b9e12646b72c9f07c69251b453ff257b07015d2b6d8c06957a00f23fb7b1a90e3e5b83964b5f116eebf51f1b78e5ea3ff460c666aa1d20c5761fcaa14c9732825b782db2e21c55d62ccef64d84de0bfb4d6c2e3bb9bbb7f566f11ae52f62214a76e27ac2aacdfc832111a3603ae43299d1d8a7f2f86200a6f0a272df1a7fa260a978cc34beb8b569936e6becd4bbf3693f64829a2d26739f02814199f0a0463e54917bcb45953cce0198f5a58e38a1979e97ca6c6173e04a456270fc3c701827ea4739ac7dcc652ed395b083843a968dbd7df6f2bfc4cf846f019651a47cfaf3b08648c3103f6f89866df7b647aeb3e8bd8541279703223bf6d08130cd9e514ec438dca6098a81d12e6cacf5ba35ad7305401afaa4eb7244b8ab8206bf1c515dd4f69553334e7b82219a56b43ae7132</script>
+  <div class="hbe hbe-content">
+    <div class="hbe hbe-input hbe-input-default">
+      <input class="hbe hbe-input-field hbe-input-field-default" type="password" id="hbePass">
+      <label class="hbe hbe-input-label hbe-input-label-default" for="hbePass">
+        <span class="hbe hbe-input-label-content hbe-input-label-content-default">Hey,你需要输入密码.&#128512</span>
+      </label>
+    </div>
+  </div>
+</div>
+<script data-pjax src="/lib/hbe.js"></script><link href="/css/hbe.style.css" rel="stylesheet" type="text/css">]]></content>
+      <categories>
+        <category>学习</category>
+        <category>计算机相关</category>
+      </categories>
+      <tags>
+        <tag>CS</tag>
+        <tag>Computer Science</tag>
+        <tag>Deep Learning</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>RF-Edit</title>
+    <url>/posts/c9358b1c/</url>
+    <content><![CDATA[<h1 id="Taming-Rectified-Flow-for-Inversion-and-Editing"><a href="#Taming-Rectified-Flow-for-Inversion-and-Editing" class="headerlink" title="Taming Rectified Flow for Inversion and Editing"></a>Taming Rectified Flow for Inversion and Editing</h1>]]></content>
+      <categories>
+        <category>论文笔记</category>
+      </categories>
+      <tags>
+        <tag>diffusion model</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>VideoDirector</title>
+    <url>/posts/c53df283/</url>
+    <content><![CDATA[<h1 id="VideoDirector-Precise-Video-Editing-via-Text-to-Video-Models"><a href="#VideoDirector-Precise-Video-Editing-via-Text-to-Video-Models" class="headerlink" title="VideoDirector: Precise Video Editing via Text-to-Video Models"></a>VideoDirector: Precise Video Editing via Text-to-Video Models</h1><p>先看看效果🤪</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/datadataimage-20241202194259030.png"></p>
+<p>效果感觉一般，以这个例子来看，其应该是对Tokenflow[^1]做的改进，应该也是用T2I模型在时空上做的操作，不过我感觉效果有限，再好也很难超过Tokenflow了。看看他怎么讲故事的<span class="github-emoji"><span>😄</span><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f604.png?v8" aria-hidden="true" onerror="this.parent.classList.add('github-emoji-fallback')"></span>。</p>
+<span id="more"></span>
+
+<h2 id="摘要"><a href="#摘要" class="headerlink" title="摘要"></a>摘要</h2><blockquote>
+<p>Despite the typical inversion-then-editing paradigm using text-to-image (T2I) models has demonstrated promising results, directly extending it to text-to-video (T2V) models still suffers severe artifacts such as color flickering and content distortion.</p>
+</blockquote>
+<p>跟我想的没错，还是Inversion-base的方法，然后research gap还是由于将T2I的图像编辑方法拓展到T2V的视频编辑方法，会出现artifacts（伪影），例如色彩闪烁和内容失真。</p>
+<blockquote>
+<p>Consequently, current video editing methods primarily rely on T2I models, which inherently lack temporal-coherence generative ability, often resulting in inferior editing results.</p>
+</blockquote>
+<p>已经有很多方法是基于T2V做的了，（尽管在社区开源的T2V模型比较少）比如我之前的工作，比如UniEdit[^2]，VidToMe[^3]，AnyV2V[^4]。很难想象这是2024年底的文章。想错了其是用T2V模型做的<span class="github-emoji"><span>🤒</span><img src="https://github.githubassets.com/images/icons/emoji/unicode/1f912.png?v8" aria-hidden="true" onerror="this.parent.classList.add('github-emoji-fallback')"></span>。其创新点是围绕时空这个research gap讲的，引言部分详细介绍。</p>
+<h2 id="引言"><a href="#引言" class="headerlink" title="引言"></a>引言</h2><blockquote>
+<p>Notably, instead of using T2V models, current video editing methods are still built upon T2I models by leveraging inter-frame features [5, 12, 14], incorporating optical flows [3], or training auxiliary temporal layers [16].</p>
+</blockquote>
+<p>有很多工作是基于T2V做的了。</p>
+<blockquote>
+<p>As a result, these methods still suffer inferior realism and temporal coherence due to the absence of temporal coherence in vanilla T2I models. This raises a question: Can we edit a video directly using T2V models?</p>
+</blockquote>
+<p>他写文章的时候不调研一下的吗，11月份应该是投CVPR2025。之后的写法基本一致，其首先介绍在图像编辑的领域，通过Null-text Inversion和CFW能够做到无偏Inversion。再通过注意力操作实现编辑任务，但是直接将这样的方法利用T2V模型搬到视频编辑任务上就会导致闪烁和失真。并用了一张图来证明：</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241202202012463.png" alt="image-20241202202012463"></p>
+<blockquote>
+<p>图画的真好看，大有可为啊！</p>
+</blockquote>
+<p>同时在这张图上，作者分析了为啥图像编辑的Inversion加注意力的范式直接通过T2V移植到视频编辑是不可行的。</p>
+<blockquote>
+<p>错怪作者了，我以为是作者的主要工作就是将图像编辑的范式通过T2V移植到视频编辑了。但是实际上作者是说直接将想法移植是不可行的，因此其做了改进，那么这个改进就是创新点！</p>
+</blockquote>
+<p>主要是有两个原因：</p>
+<ol>
+<li>T2V模型时空紧密耦合在一起，就算是使用改进后的Inversion，还是会有重建偏差</li>
+<li>视频的时空布局太复杂了，而图像编辑的注意力操作没有办法完成这么复杂的操作，太复杂就会导致操作注意力的时候不同的时空Token进行干扰。</li>
+</ol>
+<p>最后，作者介绍了针对这些问题做的改进：</p>
+<ol>
+<li>通过一个解耦合操作，提供额外的时间线索。并且将null-text embedding 拓展到多帧的阶段去适应时间信息</li>
+<li>提出了一个自注意力操作去控制复杂的时空布局</li>
+</ol>
+<blockquote>
+<p>感觉就解耦合操作是作者自己的东西，其他好像都是其他文章的。自注意力在图像编辑的时候就有引出了，这么出名作者不可能不知道，感觉作者是将各种方法拼凑在一起，最后加了一个解耦合，但是创新点不够，因此这么写。</p>
+</blockquote>
+<h2 id="方法"><a href="#方法" class="headerlink" title="方法"></a>方法</h2><p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241203193921703.png" alt="image-20241203193921703"></p>
+<p>改进1：</p>
+<p>**Muti-Frame Null-Text Embedding：**将原本的空文本Embedding拓展一个维度：${φ_t}∈R^{F ×l×c}$，其中 $l$ 和 $c$ 分别代表序列长度和Embedding维度。</p>
+<p><strong>Spatial-Temporal Decoupled Guidance:</strong> 利用视频Inversion过程中的时间和自注意力特征来获得空间和时间的解耦合信号。</p>
+<blockquote>
+<p>这个解耦合居然也是来自其他文献的，逆天了</p>
+</blockquote>
+<p>时间一致性可以通过最小化时间注意力的特征图来获得，如下图公式所示：<br>$$<br>\mathcal{L}_T = \mathcal{M}<em>T^{f/b} \cdot \mathcal{M}<em>T \cdot |(\mathcal{T}</em>+ - \mathcal{T}</em>-)|_2^2<br>$$</p>
+<p>$$<br>\mathcal{G}_T^{f/b} = \frac{\partial(\mathcal{L}_T)}{\partial z_t}<br>$$<br>其中$\mathcal{T}$代表注意力map，$+$和$-$分别代表Inversion过程和Denoising 过程，然后$ \mathcal{M}_T$代表一个Mask将Map最后一个维度选择前top $K$个值。$\mathcal{M}_T^{f/b}$代表由SAM2获得的前景和背景mask。</p>
+<blockquote>
+<p>SAM2: Segement anything ，一个语义分割模型</p>
+</blockquote>
+<p>同时上式一并用在时空注意力上如下：<br>$$<br>\mathcal{L}<em>\mathcal{K} = \mathcal{M}</em>\mathcal{K}^{f/b} \cdot ||\mathcal{K}<em>+ - \mathcal{K}</em>-||<em>2^2<br>$$<br>$$<br>\mathcal{G}</em>\mathcal{K}^{f/b} = \frac{\partial(\mathcal{L}_\mathcal{K})}{\partial z_t}<br>$$</p>
+<p>因此可以获得时空解耦的梯度如下：<br>$$<br>\mathcal{G} = \eta_f \cdot \mathcal{G}<em>T^f + \eta_b \cdot \mathcal{G}<em>T^b + \zeta_f \cdot \mathcal{G}</em>\mathcal{K}^f + \zeta_b \cdot \mathcal{G}</em>\mathcal{K}^b<br>$$<br>前面的系数都是超参，具体使用这个梯度如下：<br>$$<br>\epsilon_\theta = \epsilon_\theta(z_t, c, t) + \omega[\epsilon_\theta(z_t, c, t) - \epsilon_\theta(z_t, \phi, t)] + \mathcal{G}<br>$$<br>注意这个$\omega$就是CFG，这个式子其实就是最经典的去噪公式，只是其后面加了一个处理后的梯度$\mathcal{G}$.</p>
+<p><strong>Attention Control for Video Editing</strong>：其实就是替换自注意力，将编辑分支的注意力替换为重建分支。然后其中也使用了SAM2生成的mask，具体公式如下：<br>$$<br>\widehat{Attn}=\begin{cases} W_t \cdot V_t^<em>, &amp; \text{if } t &lt; \tau_s, \ S\left(\frac{Q_t^</em> \cdot \hat{K}_t^\top}{\sqrt{d}} \otimes [1|\mathcal{M}^f]\right) \cdot \hat{V}_t, &amp; \text{otherwise.} \end{cases}<br>$$<br>然后还有他之前提的交叉注意力的操作：<br>$$<br>M_t^C=\begin{cases} C \cdot [\gamma \cdot (M_t^<em>) + (1-\gamma) \cdot (M_t’)], &amp; \text{if } t &lt; \tau_c, \ M_t^</em>, &amp; \text{otherwise.} \end{cases}<br>$$</p>
+<blockquote>
+<p>题外话，如果噪声预测部分是用DiT实现的话，不存在交叉注意了，怎么注入呢</p>
+</blockquote>
+<h2 id="实验"><a href="#实验" class="headerlink" title="实验"></a>实验</h2><p>数据也是自己收集的，prompt来自GPT和作者自己。使用AnimateDiff作为background，这个不错看看。</p>
+<blockquote>
+<p>Our method requires 8.5 minutes for pivotal tuning and 1 minute for video editing on a single A100 GPU.</p>
+</blockquote>
+<p>跑一个要快十分钟, 还是在A100上，这就是拼凑方法的坏处。</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241202213407941.png" alt="image-20241202213407941"></p>
+<blockquote>
+<p>远远不如我的工作，而且作者的所有例子都没有shape发生大面积更改的情况，因为他们用了mask，虽然对非编辑部分进行了保护，但是也最终导致了没办法进行shape编辑。</p>
+</blockquote>
+<h2 id="相关文献"><a href="#相关文献" class="headerlink" title="相关文献"></a>相关文献</h2><p>[^1]:Geyer, Michal, Omer Bar-Tal, Shai Bagon和Tali Dekel. 《TokenFlow: Consistent Diffusion Features for Consistent Video Editing》. arXiv, 2023年11月20日. <a href="http://arxiv.org/abs/2307.10373">http://arxiv.org/abs/2307.10373</a>.<br>[^2]:Bai, Jianhong, Tianyu He, Yuchi Wang, Junliang Guo, Haoji Hu, Zuozhu Liu和Jiang Bian. 《UniEdit: A Unified Tuning-Free Framework for Video Motion and Appearance Editing》. arXiv, 2024年2月23日. <a href="https://doi.org/10.48550/arXiv.2402.13185">https://doi.org/10.48550/arXiv.2402.13185</a>.<br>[^3]:《VidToMe_Arxiv.pdf》. 见于 2024年4月13日. <a href="https://vidtome-diffusion.github.io/VidToMe_Arxiv.pdf.Ku">https://vidtome-diffusion.github.io/VidToMe_Arxiv.pdf.Ku</a>, Max, Cong Wei,<br>[^4]: Weiming Ren, Harry Yang和Wenhu Chen. 《AnyV2V: A Plug-and-Play Framework For Any Video-to-Video Editing Tasks》. arXiv, 2024年3月21日. <a href="https://doi.org/10.48550/arXiv.2403.14468">https://doi.org/10.48550/arXiv.2403.14468</a>.</p>
+]]></content>
+      <categories>
+        <category>论文笔记</category>
+      </categories>
+      <tags>
+        <tag>diffusion model</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>世界模型调研概念辨析</title>
+    <url>/posts/eac76465/</url>
+    <content><![CDATA[<h1 id="调研过程的概念辨析"><a href="#调研过程的概念辨析" class="headerlink" title="调研过程的概念辨析"></a>调研过程的概念辨析</h1><h2 id="Procedural-Content-Generation-PCG"><a href="#Procedural-Content-Generation-PCG" class="headerlink" title="Procedural Content Generation(PCG)"></a>Procedural Content Generation(PCG)</h2><p><strong>PCG</strong> 是 <strong>Procedural Content Generation</strong> 的缩写，中文通常翻译为程序化内容生成。它是一种通过<strong>算法和规则自动生成内容的技术</strong>，广泛应用于游戏开发、虚拟世界构建、影视制作等领域。简单来说就是使用算法创建数据而不是手动创建数据，这些数据是在运行的时候生成。在计算机图形学中，它通常用于创建纹理和 3D 模型。在视频游戏中，它用于自动创建大量游戏内容。其最初是由于硬件性能的限制，通过在运行过程中生成来减少游戏的大小等。根据实现方式，程序生成的优势可能包括更小的文件大小、更多的内容以及随机性，以实现更不可预测的游戏玩法。</p>
+<span id="more"></span>
+<p><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Dragon_trees.jpg/290px-Dragon_trees.jpg" alt="img"></p>
+<blockquote>
+<p>一个过程生成的例子，这里使用 L 系统生成逼真的树木模型。通过改变确定性和随机种子，可以生成不同的模型。</p>
+</blockquote>
+<h2 id="构建生态解决PCG范围"><a href="#构建生态解决PCG范围" class="headerlink" title="构建生态解决PCG范围"></a>构建生态解决PCG范围</h2><p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241128213351251.png" alt="image-20241128213351251"></p>
+<p>这里的类HuggingFace，其实是指像Huggingface或者Github或者DokerHub一样有完善的开源生态，也就有人源源不断地上传相应的PCG模块，来解决PCG功能单一的问题。同时利用LLM将需要复杂PCG能力的任务拆分成子任务，这样通过相应的PCG组合达到多样化的目的。</p>
+<h2 id="PCG-Hub"><a href="#PCG-Hub" class="headerlink" title="PCG Hub"></a>PCG Hub</h2><p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241128221828447.png" alt="image-20241128221828116"></p>
+<p>没找到但是大概可以理解就是有大量PCG模块的一个Hub，貌似来源于这篇文章<a href="https://simg.baai.ac.cn/paperfile/29268b5d-e309-4c5a-b8f8-dedecb96c741.pdf">CityX: Controllable Procedural Content Generation for Unbounded 3D Cities</a>。</p>
+<p>由于有标准的Agent可以理解的文档，因此可以使用LLM进行交互。</p>
+<h1 id="Neural-radiance-field-（NeRF）"><a href="#Neural-radiance-field-（NeRF）" class="headerlink" title="Neural radiance field （NeRF）"></a>Neural radiance field （NeRF）</h1><p>神经辐射场（NeRF）<strong>是一种基于深度学习的从二维图像重建场景三维表示的方法</strong>。NeRF 算法将场景表示为深度神经网络（DNN）参数化的辐射场。该网络预测给定相机在欧拉角（θ，Φ）中的空间位置（x，y，z）和观察方向下的体积密度和视依赖发射辐射。通过沿相机射线采样许多点，传统的体积渲染技术可以生成图像。</p>
+<ul>
+<li><strong>数据收集</strong>：一个 NeRF 需要为每个独特的场景重新训练。第一步是从不同角度收集场景的图像及其相应的相机姿态。这些图像是标准的 2D 图像，不需要专门的相机或软件。任何相机都能生成数据集，只要设置和捕获方法符合 SfM（从运动结构）的要求。</li>
+<li><strong>训练</strong>：对于每个稀疏视点（图像和相机姿态）提供的信息，通过场景中的相机光线进行行进，生成一组具有给定辐射方向（进入相机）的 3D 点。对于这些点，使用多层感知器（MLP）预测体积密度和发出的辐射。然后通过经典体积渲染生成图像。因为此过程完全可微分，可以通过多个视点的梯度下降来最小化预测图像与原始图像之间的误差，鼓励 MLP 发展一个连贯的场景模型。</li>
+</ul>
+]]></content>
+      <categories>
+        <category>前沿技术探索</category>
+      </categories>
+      <tags>
+        <tag>人工智能前沿</tag>
+        <tag>世界模型</tag>
+        <tag>深度学习</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>因果机器学习</title>
+    <url>/posts/2545fc59/</url>
+    <content><![CDATA[<h1 id="引入"><a href="#引入" class="headerlink" title="引入"></a>引入</h1><p>现有的机器学习一般注重两个变量的相关性，而不是因果性。例如，我们可以尝试比较每年计算机科学博士毕业生的数量与游戏机的总利润：</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/datacausal-ml-examples.png" alt="picture about causal ml examples"></p>
+<p>如图所示，两者显示出了高度相关性。在这种情况下，模型可以提炼两个变量的相关性，但是由于存在虚假相关性。由于模型不理解数据之间关系背后的原因，这就需要我们理解这些关系存在的原因，所以引入因果推断。具体来说就是仅仅发现数据间的相关性是不够的，需要深入理解为什么这些关系会存在，重点在于探究因果关系，而不是简单的相关性。</p>
+<blockquote>
+<p>更通俗一点的例子是，想象你发现”冰淇淋销量”和”溺水事件数量”在夏天都会上升。虽然数据显示它们高度相关，但这并不意味着吃冰淇淋会导致溺水。真正的原因是夏天这个共同的因素导致了两者都增加。这就是为什么我们需要因果推断 - 它帮助我们区分真实的因果关系和表面的相关性。</p>
+</blockquote>
+<h2 id="因果推断（Causal-inference）"><a href="#因果推断（Causal-inference）" class="headerlink" title="因果推断（Causal inference）"></a>因果推断（Causal inference）</h2><p>因果推断是许多领域中一个有趣且实用的主题。它是识别和理解变量之间因果关系的过程。在包括流行病学、经济学、政治学和心理学在内的许多研究领域中，因果推断对于理解干预措施、政策或项目的影响至关重要。因果推断还有助于预测变量变化的结果，这在实验设计和决策制定中尤其有用。</p>
+<p>因果推断是从数据中推断原因的过程，只要数据足够，就可以在任何类型的数据上进行。因此因果推断的核心是<strong>干预（intervention）<strong>和</strong>行动（doing）</strong>。而标准统计学是关于相关性的，但它们可能导致错误的假设，从而导致更糟糕的事情，例如错误的治疗或者政策；。如果我们开始形式化因果性的使用，那么它就是从结果 $Y$ 推断出治疗或政策$ T$，即”如果我们做$X$，会导致$Y$吗“。</p>
+<blockquote>
+<p>用一个具体例子来说明：<br>假设我们在研究”服用某种药物(T)”和”病情好转(Y)”之间的关系：</p>
+<ul>
+<li><p>传统统计方法：</p>
+</li>
+<li><p>可能只是观察到”服药的人病情好转率更高”</p>
+</li>
+<li><p>但这种相关性可能误导人，因为可能是轻症患者更倾向于服药</p>
+</li>
+<li><p>因果推断方法：</p>
+</li>
+<li><p>会考虑”如果我们让这个病人服用药物，会如何影响他的病情？”</p>
+</li>
+<li><p>会通过合理的实验设计或数据分析方法，排除其他影响因素</p>
+</li>
+<li><p>试图回答”是药物导致了病情好转”这个因果问题</p>
+</li>
+</ul>
+<p>简单来说：</p>
+<ul>
+<li>相关性告诉我们”事物同时发生”</li>
+<li>因果关系告诉我们”一件事导致另一件事发生”</li>
+<li>因果推断就是帮助我们科学地区分这两种情况的方法</li>
+</ul>
+<p>这就像是从”看到下雨时人们都打伞”这个现象，推断出”下雨导致人们打伞”，而不是”打伞导致下雨”这个显然错误的结论。</p>
+</blockquote>
+<p>再使用一个例子来解释：穿鞋睡觉会导致头痛，其中穿鞋睡觉是<strong>输入变量</strong>，头痛是<strong>输出变量</strong>。</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/datacausal-ml-explanation.png" alt="picture about causal ml explanation"></p>
+<p>如果我们寻找这种行为的原因和起因，可能是前一天晚上我们喝了酒：</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/datacausal-ml-explanation-end.png" alt="picture about causal ml explanation end"></p>
+<p>这个原因被称为<strong>混杂变量（confounding variable）</strong>，即<strong>这个变量与模型中的输入变量和输出变量都有关联，并且可以扭曲它们之间的因果关系</strong>。换句话说，混杂变量是一个同时影响输入变量和输出变量的变量，并可能产生一种实际上是虚假的因果关系（即穿鞋睡觉会导致头痛，实际上是喝酒导致的头痛）。</p>
+<p><strong>混杂变量的特征</strong>：</p>
+<ol>
+<li>与输入变量有关系</li>
+<li>与输出变量有关系</li>
+<li>能够制造出表面上的因果关系假象</li>
+</ol>
+<p>最后，总的关联是：</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/datacausal-ml-total-association.png" alt="picture about causal ml total association"></p>
+<p>形式上，如果 $T$ 的变化导致$ Y$ 的变化，并且<strong>其他所有因素保持不变</strong>，则$ T$ 引起$ Y$。那么，因果效应是 $Y$ 因 $T$  <strong>变化一个单位</strong>而变化的幅度。式子如下所示：<br>$$<br>E[Y|do(T=1)] - E[Y|do(T=0)]<br>$$</p>
+<h2 id="因果机器学习"><a href="#因果机器学习" class="headerlink" title="因果机器学习"></a>因果机器学习</h2><p>到目前为止，我们只解释了因果关系是什么，但你可能想知道，“我该如何在我的机器学习模型上应用因果关系？”为此，出现了因果机器学习，这是一个新兴的研究领域，旨在提高机器学习模型捕捉数据中因果关系的能力。机器学习中的因果推断基于这样一个观点，即<strong>变量之间的相关性通常不足以建立因果关系，因为可能存在其他影响两者的变量</strong>。</p>
+<p>机器学习模型通常依赖于关联学习，即发现数据中模式以进行预测的能力。然而，在需要更深入理解潜在因果关系的情况下，这种能力可能会受到限制。机器学习中的因果推理试图通过使用考虑变量之间因果关系的技巧和算法来解决这个问题。机器学习中因果推理的目标是提高模型的准确性和可解释性，这在健康、经济、政策和司法等领域具有重要意义。例如，因果推理模型可以用来理解干预和政策的影响，控制数据中的偏差，并在自动化决策中提供更大的透明度和可解释性。总的来说，机器学习中的因果推理是一个重要的研究领域，旨在提高机器学习模型捕捉数据中因果关系的能力。这一能力可能在众多领域产生重要影响，并且预计机器学习中的因果推理在未来将继续是一个活跃的研究领域。</p>
+<h2 id="因果发现"><a href="#因果发现" class="headerlink" title="因果发现"></a>因果发现</h2><p>如何使用纯观察数据中获取有价值的因果信息，纯观察数据指的是没有进行实验干预，仅通过观察收集的数据，有多种方法可以处理这个问题，其中最著名的就是朱迪亚·柏尔提出的方法，这种方法使用统计学来进行因果推断。其核心思想是构建包含可测量变量的模型或图，这些变量之间可能存在相互影响，并通过图形化的方式来展示变量间的关系。</p>
+<blockquote>
+<p>以一个例子来说明：假设我们想研究”教育程度”对”收入”的影响：</p>
+<p>家庭背景 → 教育程度 → 收入<br>        ↘          ↗<br>          能力水平</p>
+<p>这种方法可以清晰的展示变量间的关系，可以帮助我们理解复杂的因果网络，即使只有观察数据也能得出有意义的结论。</p>
+</blockquote>
+<p>为了使用因果图我们必须假设因果马尔科夫条件。形式上，它表示在所有直接原因的集合下，一个节点与所有不是该节点的直接原因或直接效果的变量独立。即对于我们建模的因果图进行简化：</p>
+<blockquote>
+<p>让我帮你解析因果马尔可夫条件(Causal Markov Condition)这个重要概念：</p>
+<ol>
+<li>正式定义：</li>
+</ol>
+<ul>
+<li>给定一个节点的所有直接原因（父节点）</li>
+<li>这个节点与其他变量（非直接原因或结果的节点）是独立的</li>
+</ul>
+<ol start="2">
+<li>简单来说：</li>
+</ol>
+<ul>
+<li>这个假设认为图中展示的关系包含了所有变量间的真实关系</li>
+<li>没有画出的关系就表示不存在直接关联</li>
+</ul>
+<p>用一个具体例子来说明：<br>假设我们有一个因果图：</p>
+<figure class="highlight plaintext"><table><tbody><tr><td class="code"><pre><span class="line">&gt;教育程度(E) → 工作技能(S) → 收入(I)</span><br></pre></td></tr></tbody></table></figure>
+
+<p>根据因果马尔可夫条件：</p>
+<ol>
+<li>给定工作技能(S)后：</li>
+</ol>
+<ul>
+<li>教育程度(E)和收入(I)是条件独立的</li>
+<li>也就是说，如果我们已知某人的工作技能水平</li>
+<li>那么他的教育程度就不会给我们额外的信息来预测他的收入</li>
+</ul>
+<p>就像是一个传递链：</p>
+<ul>
+<li>教育影响技能</li>
+<li>技能影响收入</li>
+<li>教育对收入的影响完全通过技能来传递</li>
+<li>没有其他”秘密通道”</li>
+</ul>
+<p>实际应用的重要性：</p>
+<ol>
+<li>简化分析：</li>
+</ol>
+<ul>
+<li>我们只需要关注直接相连的变量</li>
+<li>不用考虑所有可能的关系</li>
+</ul>
+<ol start="2">
+<li>模型可靠性：</li>
+</ol>
+<ul>
+<li>如果这个假设成立</li>
+<li>我们就能相信图中展示的因果关系</li>
+</ul>
+<ol start="3">
+<li>预测能力：</li>
+</ol>
+<ul>
+<li>帮助我们确定需要收集哪些数据</li>
+<li>知道控制哪些变量来做预测</li>
+</ul>
+<p>这就像是在玩多米诺骨牌：</p>
+<ul>
+<li>每个骨牌只直接影响它相邻的骨牌</li>
+<li>给定中间骨牌的状态</li>
+<li>第一个骨牌的状态就不会影响最后一个骨牌</li>
+</ul>
+<p>需要我进一步解释某些概念吗？</p>
+</blockquote>
+<p>寻找因果关系是科学中的基本任务之一。一种广泛使用的方法是随机实验。例如，为了检验一种新开发的药物是否对癌症治疗有用，研究人员招募受试者并将他们随机分为两组。一组是对照组，受试者接受安慰剂，另一组是治疗组，受试者接受新开发的药物。随机化的原因是为了消除混杂因素的影响。例如，年龄可能是影响是否服用药物和治疗效果的可能混杂因素之一。因此，在实际实验中，我们应该使两组年龄分布几乎相同。技术上，可以使用倾向得分匹配来消除可能混杂因素的影响。</p>
+<p>为了定量评估药物的有效性，可以使用：<br>$$<br>ATE = E[Y|do(X = 1)] - E[Y|do(X = 0)]<br>$$<br>$do(X=1)$表示用药物处理受试者，而$do(X=0)$表示用安慰剂处理受试者。$do$ 运算符代表干预；它删除所有指向 $X$ 的事件边并将其设置为固定值，如下图：</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataScreen-Shot-2019-11-26-at-6.24.58-PM-1024x281.png" alt="img"></p>
+<p><strong>因果分析中的其他概念</strong>：</p>
+<ul>
+<li><p>一致性假设（Consistency）：一致性假设是指，对于同一个个体，在相同的处理水平下，无论通过什么方式实施处理，其潜在结果都应该是相同的。</p>
+<blockquote>
+<p>假设我们在研究”服用阿司匹林”对”缓解头痛”的因果效应。符合一致性：不管是口服阿司匹林片剂还是咀嚼阿司匹林片剂，只要剂量相同(比如500mg)，对头痛的缓解效果应该是一样的</p>
+</blockquote>
+</li>
+<li><p>正概率（Positivity）假设：每个研究单位都必须 有一定概率接受处理（treatment），不能存在零概率的情况。</p>
+<blockquote>
+<p>假设研究”展览位置”对”艺术品销售”的影响：✓ 符合正概率：每件艺术品都有机会被放在展厅的不同位置。✗ 违反正概率：如果某些艺术品因为尺寸太大，完全不可能被放置在某些位置</p>
+</blockquote>
+</li>
+<li><p>个体处理值稳定性假设（SUTVA）：一个研究对象的潜在结果只取决于它自身接受的处理，不受其他对象处理状态的影响。</p>
+<blockquote>
+<p>用艺术品市场的例子说明：✓ 符合SUTVA：艺术品A的售价仅取决于它自己是否放在展厅显眼位置。✗ 违反SUTVA：艺术品A的售价受到周围其他艺术品展示位置的影响</p>
+</blockquote>
+</li>
+<li><p>条件可交换性（无未测量混杂）假设：在控制了已知的混杂变量后，处理的分配与潜在结果是相互独立的。换句话说，没有遗漏重要的混杂因素。</p>
+<blockquote>
+<ul>
+<li>✓ 符合假设：</li>
+<li>我们已控制所有影响”是否包含人脸”和”售价”的关键变量</li>
+<li>如：艺术家声誉、作品尺寸、创作年代、材质等</li>
+<li>✗ 违反假设：</li>
+<li>存在未测量的重要因素（如艺术品的技术复杂度）</li>
+<li>这些因素同时影响了作品是否包含人脸和售</li>
+</ul>
+</blockquote>
+</li>
+</ul>
+<h2 id="相关文献"><a href="#相关文献" class="headerlink" title="相关文献"></a>相关文献</h2><p>[因果推理机器学习概述 - 爱立信 — Overview of causal inference machine learning - Ericsson](<a href="https://www.ericsson.com/en/blog/2020/2/causal-inference-machine-learning#:~:text=When">https://www.ericsson.com/en/blog/2020/2/causal-inference-machine-learning#:~:text=When</a> humans rationalize the world,to reason in similar ways.)</p>
+<p><a href="https://netflixtechblog.com/causal-machine-learning-for-creative-insights-4b0ce22a8a96">因果机器学习，创意洞察 | 由 Netflix 技术博客 | Netflix TechBlog — Causal Machine Learning for Creative Insights | by Netflix Technology Blog | Netflix TechBlog</a></p>
+<p><a href="https://blog.ml.cmu.edu/2020/08/31/7-causality/">7 – 因果推断 – 机器学习博客 | ML@CMU | 卡内基梅隆大学 — 7 – Causal Inference – Machine Learning Blog | ML@CMU | Carnegie Mellon University</a></p>
+<p><a href="https://www.youtube.com/watch?v=qbQjLTjTSYA&amp;t=27s">The Hitchhiker’s Guide to Your Users: Personalization Through Causal ML | Singularity Tech Day 2021</a></p>
+]]></content>
+      <categories>
+        <category>学习</category>
+      </categories>
+      <tags>
+        <tag>机器学习</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>因果分析</title>
+    <url>/posts/1e4c8cfb/</url>
+    <content><![CDATA[<h2 id=""><a href="#" class="headerlink" title=""></a></h2><p>#因果分析解释视频编辑</p>
+<h2 id="研究动机"><a href="#研究动机" class="headerlink" title="研究动机"></a>研究动机</h2><p>文本驱动的视频编辑任务，即将输入视频按照输入的描述（prompt）输出符合描述的目标视频。在该任务下存在两个需要满足的基本要求，一个是可编辑性（<strong>editability</strong>）和保真度（<strong>fidelity</strong>）。其中可编辑性指的是更符合目标描述，保真度是指对输入视频的保留程度（<em>对非编辑区域的保留</em>）。现有的很多视频编辑方法（例如fatezero，tokenflow等），通过将模型内部的注意力从重建分支（<em>使用输入视频描述 source prompt</em>）到编辑分支（使用目标视频描述 target prompt），来平衡可编辑性和对输入视频非编辑部分的保留。尽管这些方法在一些视频上取得了不错的效果，但这些方法存在一个显著的问题，那就是输入视频描述（<em>source prompt</em>）和输出视频描述（<em>target prompt</em>）不足以描述整个视频的全部语义信息。</p>
+<blockquote>
+<p>[!tip]</p>
+<p>例如 我们无法使用重建分支（也就是 <em>source prompt</em>）精确重建整个源视频。除非是像一些方法去学习源视频和重建视频之间的gap。</p>
+</blockquote>
+<p>这些问题在图像编辑中出现，但在视频编辑任务中尤为突出，原因是 <em>prompt</em> 很难描述像素值的跨帧迁移及其他画面细节，也就是我们难以使用上述方法保证时间连续性和空间上的视频细节保持。这些<em>non-prompt</em>的语义信息作为视频编辑任务的Confounder同时影响源视频和目标视频，其造成的虚假关联间接导致了编辑结果的模糊和时间不连续性，<strong>降低了结果的可编辑性</strong>。此外，上述方法仅通过注意力操作，也难以区分编辑区域与非编辑区域，使得非编辑区域导致了整个编辑结果的因果效应，造成了非目标区域的编辑，<strong>降低了结果的保真度</strong>。</p>
+<blockquote>
+<p>[!tip]</p>
+<p>有些方法通过fine-tune或者是lora来估计视频的动作，也可以看做是补充 <em>no-prompt</em>的语义信息。有些方法通过使用语义分割模型生成的掩码（<em>mask</em>）,也可以看做是降低非编辑部分的因果效应。</p>
+</blockquote>
+<p>因此现有方法主要存在两个问题：</p>
+<ol>
+<li>忽视了 <em>non-prompt</em>的语义信息作为Confounder导致的虚假关联，进而导致了编辑结果的模糊和时间不连续性</li>
+<li>忽视了非编辑区域的因果效应，导致非目标区域被编辑</li>
+</ol>
+<p>为了解决这两个问题，我们的方法使用DDS作为基础框架，通过将整个视频编辑任务建模为因果结构，揭示了上述存在的两个问题。由于生成源视频的两个变量，编辑区域和非编辑区域不可观测，因此我们首先生成编辑区域和非编辑区域的代理变量，进而通过干预操作削弱了非编辑区域的因果效应，减弱了对非目标区域的编辑，增加了结果的保真度。此外我们的方法，近似估计出了整个视频存在的语义Confounder，通过后门调整削弱了其带来的虚假关联，进而提升了结果的可编辑性。通过广泛的实验，我们证明了我们的方法在编辑性能方面优于当前的最先进方法，突显了其在推动视频编辑领域发展中的潜在价值。</p>
+<blockquote>
+<p>[!warning]</p>
+<p>尽管DDS也有上述存在的两个问题，但由于DDS使用蒸馏梯度对隐变量进行更新，并使用T2V模型，一定程度上更易估计<em>non-prompt</em>语义信息, 同时通过操作梯度也更易削弱非目标区域对结果的因果效应。</p>
+</blockquote>
+<p>具体来说我们的贡献如下：</p>
+<ol>
+<li>首次在视频编辑任务上建模了因果结构，揭示了影响视频编辑效果的底层因果原因。</li>
+<li>通过因果干预，削弱了非编辑效果的因果效应，增强了对非编辑部分的保护</li>
+<li>通过后门调整，削弱了Confounder带来的虚假关联，增强了结果的可编辑性</li>
+</ol>
+<p>##方法</p>
+<h3 id="符号表"><a href="#符号表" class="headerlink" title="符号表"></a>符号表</h3><table>
+<thead>
+<tr>
+<th>符号</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>$\mathit{E}$</td>
+<td>视频编辑区域</td>
+</tr>
+<tr>
+<td>$\mathit{P}$</td>
+<td>视频保留区域</td>
+</tr>
+<tr>
+<td>$\mathit{V}$</td>
+<td>输入视频</td>
+</tr>
+<tr>
+<td>$\mathit{Y}$</td>
+<td>目标视频</td>
+</tr>
+<tr>
+<td>$\boldsymbol{\phi}^e$</td>
+<td>目标描述</td>
+</tr>
+<tr>
+<td>$\boldsymbol{\phi}^p$</td>
+<td>输入视频描述</td>
+</tr>
+<tr>
+<td>$\mathit{C}$</td>
+<td>语义混杂因子</td>
+</tr>
+<tr>
+<td>$\boldsymbol{M}$</td>
+<td>编辑区域掩码</td>
+</tr>
+<tr>
+<td>$\boldsymbol{z}_t$</td>
+<td>时间步 t 的隐变量</td>
+</tr>
+<tr>
+<td>$\boldsymbol{\phi}_t$</td>
+<td>时间步 t 的语义嵌入</td>
+</tr>
+<tr>
+<td>$\mathsf{IE}$</td>
+<td>总干预效应</td>
+</tr>
+<tr>
+<td>$\mathsf{A}$</td>
+<td>注意力函数</td>
+</tr>
+<tr>
+<td>$\mathsf{G}$</td>
+<td>生成函数</td>
+</tr>
+<tr>
+<td>$\varepsilon_\theta$</td>
+<td>噪声预测网络</td>
+</tr>
+<tr>
+<td>$\alpha_t$</td>
+<td>噪声调度参数</td>
+</tr>
+</tbody></table>
+<h3 id="9312-建模因果图"><a href="#9312-建模因果图" class="headerlink" title="①&nbsp; 建模因果图"></a>①&nbsp; 建模因果图</h3><pre><code>	![幻1](https://raw.githubusercontent.com/yangkunl/image_hosting/main/data%E5%B9%BB1.SVG)
+</code></pre>
+<p><strong>在此因果图中，我们定义了以下变量：</strong>$C$是全局语义Confounder，代表<em>non-prompt</em>的语义信息，$\mathit{E}$代表需要编辑部分，$\mathit{P}$代表不需要编辑部分，$V$代表源视频，$Y$代表目标视频，$\boldsymbol{\phi}$代表目标prompt。</p>
+<ul>
+<li><p>首先，$E \rightarrow V \leftarrow P$：这是输入视频的生成过程。对于视频编辑任务来说，我们将输入视频的生成因素分为编辑部分和非编辑部分。</p>
+</li>
+<li><p>其次，$E \rightarrow V \rightarrow Y$：这是需要编辑部分到目标视频$Y$的路径，我们的目标是<strong>强化</strong>这一路径。</p>
+</li>
+<li><p>再次，$P \rightarrow V \rightarrow Y$：进行视频编辑产生的非编辑误差主要源自这条路径，因此我们的目标是<strong>消除</strong>这条路径。</p>
+</li>
+<li><p>最后，$V \leftarrow C \rightarrow Y$：这是一条后门路径，混杂因子$T$会同时影响输入视频$V$和输出视频$Y$。</p>
+</li>
+</ul>
+<h3 id="9313-削弱-P-rightarrow-text-V-rightarrow-text-Y"><a href="#9313-削弱-P-rightarrow-text-V-rightarrow-text-Y" class="headerlink" title="② 削弱$P \rightarrow \text{V} \rightarrow \text{Y}$"></a>② 削弱$P \rightarrow \text{V} \rightarrow \text{Y}$</h3><p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/data%E5%B9%BB2.SVG" alt="幻2"></p>
+<ol>
+<li><p>如何找到$E$和$P$的代理变量</p>
+<p>由于$E$和$P$对于视频编辑来说，实际上是不可观测的对象。因此我们只能通过一些方式计算出其代理变量。在这里，我们通过 <strong>source prompt</strong> 和 <strong>target prompt</strong>，来找到视频编辑任务中的编辑部分$E$和非目标区域$P$。具体来说，我们可以通过这两个语义描述，生成编辑对象的mask $M$。</p>
+<blockquote>
+<p>[!tip]</p>
+<p>这里的$\mathcal{M}$的计算方式可以有多种方法，例如使用语义分隔模型（<em>Segment Anything</em>[^1])。也可以使用Unet中的 <em>cross attention</em>，其作为<em>prompt</em> 和 <em>model</em>交互的地方可以生成对应的语义mask。但是在这里，我们使用另外一种方式[^2]：<br>$$<br>\boldsymbol{M} = |\epsilon_{\phi}^{w}(\hat{\boldsymbol{z}}<em>{t}(\theta), t, \boldsymbol{y}) - \epsilon</em>{\phi}^{w}(\boldsymbol{z}_{t}, t, \hat{\boldsymbol{y}})|<br>$$<br>这只是一个简洁的写法，其他还有的操作包括按通道平均，设置阈值和二值化。这样做的好处是，由于使用DDS框架，上述式子其实就是DDS的grad。所以基本上可以无缝衔接到DDS框架上面，而不用加载额外的模型，增加额外的计算量。这种方法也可以看做DDS的grad的可视化的一种方法。    </p>
+</blockquote>
+</li>
+<li><p>定义干预效应</p>
+<p>为了为了学习强大的编辑相关关联$\mathsf{P}_e(\mathit{Y}|\mathit{V}, \boldsymbol{\phi}^e)$，以替代在DDS中因非编辑区域而受到影响的传统关联$\mathsf{P}(\mathit{Y}|\mathit{V}, \boldsymbol{\phi}^e)$，我们切断路径$P \rightarrow V \rightarrow Y$，而保留路径$E \rightarrow V \rightarrow Y$。理想情况下，在这样的模型中，上述DDS产生的梯度 $g = \mathsf{P}_e(\mathit{Y}|\mathit{V}, \boldsymbol{\phi}^e)$应该对非编辑内容$P$不变且对编辑内容$E$敏感。为了正式地在$\mathsf{P}_e(\mathit{Y}|\mathit{V}, \boldsymbol{\phi}^e)$中表述这种属性，我们首先引入干预效应（IE）的概念，测量当干预生成因素（$P$ 或 $E$）取特定值（$\hat{p}$ 或 $\hat{c}$）时产生的DDS梯度的影响。以生成因素$P$为例，干预效应定义如下：<br>$$<br>\mathsf{IE}(\mathcal{g}|\mathsf{do}(\mathit{P}=\hat{\mathit{p}})) = \mathsf{P}_e(\mathit{Y}|\mathit{V}, \boldsymbol{\phi}^e) - \mathsf{P}_e^{\mathsf{do}(\mathit{P}=\hat{\mathit{p}})}(\mathit{Y}|\mathit{V},\boldsymbol{\phi}^e) \<br>$$<br>进而轻易得到下述的式子：<br>$$<br>\begin{cases}<br>|\mathsf{IE}(\mathcal{g}|\mathsf{do}(\mathit{P}=\hat{\mathit{p}}))| = 0 \[1em]<br>|\mathsf{IE}(\mathcal{g}|\mathsf{do}(\mathit{E}=\hat{\mathit{e}}))| &gt; 0<br>\end{cases}<br>$$</p>
+</li>
+<li><p>进而可推出下列不等式<br>$$<br>|\mathsf{IE}(\mathcal{g}|\mathsf{do}(\mathit{P}=\hat{\mathit{p}}))|  &lt; |\mathsf{IE}(\mathcal{g}|\mathsf{do}(\mathit{E}=\hat{\mathit{e}}))|<br>$$<br>鉴于$E$和$P$不可观测，引入了<span v-mark.circle.orange="2">代理变量</span>的概念。</p>
+</li>
+<li><p>生成代理变量<br>$$<br>\mathit{E} = \mathit{V} \otimes \boldsymbol{M},\quad\mathit{P} = \mathit{V} \otimes (1-\boldsymbol{M}).<br>$$</p>
+</li>
+<li><p>获得干预集</p>
+<p>$$<br>\hat{\mathit{E}} = \frac{1}{k} \sum_{j \in \mathsf{Top}\text{-}k} \boldsymbol{v}<em>j, \quad<br>\hat{\mathit{P}} = \frac{1}{k} \sum</em>{j \in \mathsf{Top}\text{-}k} \boldsymbol{v}_j.<br>$$</p>
+</li>
+<li><p>将干预集加在loss $\mathcal{L}$里面<br>$$<br>\begin{aligned}<br>\mathsf{L}<em>{\text{causal}} &amp;= |\mathsf{IE}</em>{[{\hat{\mathit{E}}}<em>{t=1}^T]} - \mathsf{IE}</em>{[\hat{\mathit{P}}}<em>{t=1}^T]}|\<br>\mathsf{L}</em>{\text{total}} &amp;= \mathsf{L}<em>{\text{base}} + \lambda \cdot \mathsf{L}</em>{\text{causal}}<br>\end{aligned}<br>$$</p>
+</li>
+<li><p>更新memory_bank<br>$$<br>v_i = \mu v_i + (1 - \mu) \boldsymbol{E}_t<br>$$</p>
+<blockquote>
+<p>[!warning]<br>$$<br>\mathcal{g}_{e} = \mathcal{g} \cdot \mathcal{M} \<br>\mathcal{g}_u = \mathcal{g} \cdot \mathcal{M}<br>$$<br>我现在使用的是使用梯度来，但是只使用梯度好像不太好解释，所有我把其换成了，这个我可以试一下，用latent有没有效果</p>
+</blockquote>
+</li>
+<li></li>
+</ol>
+<p>###③&nbsp;消除虚假关联</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/data%E5%B9%BB3.SVG" alt="幻3"></p>
+<p>为了消除”non-prompt”的语义Confounder带来的虚假关联，由于无法直接得到该Confounder的具体值，因此我们采用了一种巧妙的估计方法。我们借用视频编辑任务常用的DDIM，通过source prompt 无法精确重建源视频，我们利用其中的差值对prompt 的embedding进行训练。从而将prompt的估计值通过训练估计在其中。为了合理的使用我们估计出来的confounder的值，我们使用target prompt 进行DDIM forward，并将近似Confounder通过注意力注入的方式进行后面操作。</p>
+<blockquote>
+<p>[!warning]</p>
+<p>这里估计和注入操作是同时进行的，因此不会增加额外的时间消耗。尽管我们的方法也使用了DDIM及注意力，但是我们的注意力是为了传递Confounder进行的，这是为了在进行DDS迭代前削弱虚假关联带来的影响。</p>
+</blockquote>
+<p>具体方法如下：</p>
+<ol>
+<li><p>使用空文本进行 DDIM Inversion：<br>$$<br>\boldsymbol{z}<em>{t+1} = \sqrt{\frac{\alpha</em>{t+1}}{\alpha_t}} \boldsymbol{z}<em>t + \sqrt{\alpha</em>{t+1}} \left( \sqrt{\frac{1}{\alpha_{t+1}} - 1} - \sqrt{\frac{1}{\alpha_t} - 1} \right) \cdot \varepsilon_\theta(\boldsymbol{z}_t, \boldsymbol{\varnothing})<br>$$</p>
+</li>
+<li><p>对每个迭代步的源描述嵌入进行优化：<br>$$<br>\boldsymbol{\phi}<em>t^* = \arg \min</em>{\boldsymbol{\phi}<em>t^p} |\boldsymbol{z}^*</em>{t-1} - \boldsymbol{z}_{t-1}(\tilde{\boldsymbol{z}}_t, t, \boldsymbol{\phi}_t^p)|^2<br>$$</p>
+</li>
+<li><p>将估计后的混杂因子通过注意力注入到去混杂分支：<br>$$<br>\begin{aligned}<br>\mathsf{P}(\mathit{Y}|\mathsf{do}(\mathit{V},\mathit{C})) &amp;= \sum_{c \in \mathit{C}} \mathsf{P}(\mathit{Y}|\mathit{y}, \mathit{V}, c)\mathsf{P}(c) \<br>&amp;= \sum_{c} \mathsf{P}(\mathit{Y}|\mathit{y}, \mathsf{G}(\mathit{V}, c))\mathsf{P}(c) \<br>&amp;\approx \mathsf{P}(\mathit{Y}|\boldsymbol{\phi}<em>t^e,\sum</em>{t}\mathsf{A}(\mathit{V}, \boldsymbol{\phi}_t^*)<br>\end{aligned}<br>$$</p>
+</li>
+</ol>
+<p>其中，$\mathit{V}$ 表示源视频，$\mathit{C}$ 表示混杂因子，$\boldsymbol{\phi}_t^e$ 表示目标描述，$\boldsymbol{\phi}_t^*$ 表示估计的语义嵌入，$\mathsf{A}(\cdot)$ 表示注意力函数，$\mathsf{G}(\cdot)$表示生成函数。</p>
+<blockquote>
+<p>[!tip]</p>
+<p>这里的注意力注入，可以尝试更换为Cross attention，也就是P2P的方法。由于cross attention是与prompt相联系的，因此可以获得更好的解释</p>
+</blockquote>
+<h3 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h3><blockquote>
+<p>[!warning]</p>
+<p>不论是获得mask还是其他的，source prompt其实都不能够精确获得，但是我们可以通过这样说通过消除语义Confounder之后的隐变量可以用来生成mask之类的。如果这里的Confounder是prompt的语义Confounder的话，那么我应该如何引出这里呢。如何做相应的实验。这里的Confounder与Classifier-free 的方法进行对比。这里的Confounder可以那就是在source prompt和target prompt之中还存在广泛的语义空间，这些空间是Confounder同时影响，所有我们可以通过null-text把Confounder找出来并进行遍历。这里的这些其他语义其实就是Confounder，他们同时影响输入视频和目标视频，由于没有明确说明，这些Confounder往往只能通过vae endcoer之后的原始隐变量获得，并在进行编辑的时候被改变，导致了许许多多的问题，就是不能够精确编辑（可以用那个天鹅和鸭子或者是Jeep和保时捷的例子来举例），往往通过target promot没办法编辑到隐含的语义。</p>
+<p>通过null-text拿到其他语义之后，为什么能够通过Injection attention改变？</p>
+<p>之后就是因果解释的框架了，通过这个Confounder之后，通过后门操作去做</p>
+<p>这样PnP就只是我们做后门操作的一种方法了</p>
+</blockquote>
+<h2 id="参考文献"><a href="#参考文献" class="headerlink" title="参考文献"></a>参考文献</h2><p>[^1]:Kirillov, A., Mintun, E., Ravi, N., Mao, H., Rolland, C., Gustafson, L., … &amp; Girshick, R. (2023). Segment anything. In <em>Proceedings of the IEEE/CVF International Conference on Computer Vision</em> (pp. 4015-4026).<br>[^2]: <a href="https://github.com/huggingface/diffusers/blob/v0.31.0/src/diffusers/pipelines/stable_diffusion_diffedit/pipeline_stable_diffusion_diffedit.py#L829">https://github.com/huggingface/diffusers/blob/v0.31.0/src/diffusers/pipelines/stable_diffusion_diffedit/pipeline_stable_diffusion_diffedit.py#L829</a></p>
+]]></content>
+      <categories>
+        <category>学习</category>
+        <category>计算机相关</category>
+      </categories>
+      <tags>
+        <tag>机器学习</tag>
+        <tag>人工智能</tag>
+        <tag>概率图模型</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>机器学习</title>
+    <url>/posts/498ab7d9/</url>
+    <content><![CDATA[<h2 id="概率图模型"><a href="#概率图模型" class="headerlink" title="概率图模型"></a>概率图模型</h2><p>概率图模型，简称图模型，是指用一种用图结构描述多元随机变量之间条件独立关系的概率模型，从而给研究高维空间中的概率模型带来了很大的便捷性。对于一个K维随机变量$X=[X_1,X_2,\cdots,X_K]^T$，其联合概率为高维空间中的分布，一难以直接建模。</p>
+<blockquote>
+<p>在不做任何独立假设条件的情况下，需要$M^K-1$的参数才能表示其概率分布</p>
+<p><strong>为什么需要  $M^K - 1$  个参数？</strong></p>
+<p>对于一个 ( $K$) 维离散随机向量 $\mathbf{X} = [X_1, X_2, \cdots, X_K]^T$，假设每个变量 ( $X_i$ ) 有 $M $个可能取值，则联合概率分布需要 $M^K $ 个概率值来完全描述所有可能的取值组合。然而，由于概率分布需要满足归一化约束（所有概率之和为 1），因此只需要 ( $M^K - 1$ ) 个独立参数即可描述整个分布。</p>
+</blockquote>
+<span id="more"></span>
+
+<p>为了减少联合概率建模的参数量，首先可以将一个$K$维随机向量$X$的联合概率分解为$K$个条件概率的乘积：<br>$$<br>p(x) \triangleq P(X = x)= \prod_{k=1}^K p(x_k|x_1,\cdots,x_{k-1}),<br>$$<br>其中$x_k$代表变量$X_k$的取值，如果某些变量之间存在条件独立，其参数量就可以大幅减少。当概率模型中的变量数量比较多时，其条件依赖关系也比较复杂．我们可 以使用图结构的方式将概率模型可视化，以一种直观、简单的方式描述随机变量 之间的条件独立性，并可以将一个复杂的联合概率模型分解为一些简单条件概率模型的组合。</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241202134344599.png" alt="image-20241202134344599"></p>
+<p>图结构的三个基本问题：（1） 表示问题 （2）学习问题 （3）推断问题。</p>
+<h3 id="模型表示"><a href="#模型表示" class="headerlink" title="模型表示"></a>模型表示</h3><p>图由一组节点和节点之间的边组成。在概率图模型中，每个节点都表示一 个随机变量（或一组随机变量），边表示这些随机变量之间的概率依赖关系。常见的概率图模型可以分为两类：有向图模型和无向图模型。</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241202134803019.png" alt="image-20241202134803019"></p>
+<h4 id="有向图模型"><a href="#有向图模型" class="headerlink" title="有向图模型"></a>有向图模型</h4><p>有向图模型也称为贝叶斯网络或信念网络，是一类用有向图来描述随机向量概率分布的模型。贝叶斯网络，对于一个$K$维随机向量$X$和一个$K$个节点的有向非循环图$𝐺$，$𝐺$中的每个节点都对应一个随机变量，每个连接$𝑒_{𝑖𝑗}$表示两个随机变量$𝑋<em>𝑖$和$𝑋_𝑗$之间具有非独立的因果关系．令$𝑿</em>{𝜋𝑘}$ 表示变量𝑋𝑘的 所有父节点变量集合，$𝑃(𝑋<em>𝑘|𝑿</em>{𝜋𝑘} )$表示每个随机变量的局部条件概率分布。如果$X$的联合概率分布可 以分解为每个随机变量$𝑋<em>𝑘$的局部条件概率的连乘形式，即<br>$$<br>p(\boldsymbol{x}) = \prod</em>{k=1}^{K} p(x_k|x_{\pi_k}),<br>$$</p>
+<blockquote>
+<p>这个公式可以由上式中条件概率分布推导出联合概率分布得出。上述的$(G,X)$构成了一个贝叶斯网络。</p>
+</blockquote>
+<p><strong>条件独立性</strong>：在贝叶斯网络中，如果两个节点是直接连接的，它们肯定是非条件独立的，是直接因果关系，父节点是因，直接的是果。</p>
+<p>如果不是直接连接的，则情况较为复杂如下：</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241202140827258.png" alt="image-20241202140827258"></p>
+<p>这四种关系分别为：（1） 间接因果关系 （2）间接果因关系 （3）共因关系 （4）共果关系</p>
+<blockquote>
+<p>这四种关系比较抽象，以一个例子来说明：</p>
+<p>共因关系是指两个变量（$𝑋_1$和$𝑋_3$）都受到同一个变量（$𝑋_2$）的影响，其中$𝑋_2$被称为”共同原因”或”共因”。</p>
+<p>这种关系有两个重要特征：</p>
+<ol>
+<li>当我们不知道$𝑋_2$的情况时，$𝑋_1$和$𝑋_3$之间会表现出相关性（不独立）</li>
+<li>但当我们知道了$𝑋_2$的值后，$𝑋_1$和$𝑋_3$就变成条件独立的了</li>
+</ol>
+<p>举个实际例子：</p>
+<ul>
+<li>$𝑋_2$是天气（晴/雨）</li>
+<li>$𝑋_1$是人们带伞的情况</li>
+<li>$𝑋_3$是地面是否潮湿</li>
+</ul>
+<p>如果我们不知道天气情况（$𝑋_2$），看到有人带伞（$𝑋_1$）就能推测地面可能潮湿（$𝑋_3$）。但如果我们已经知道天气情况（$𝑋_2$），那么人们是否带伞（$𝑋_1$）就与地面是否潮湿（$𝑋_3$）没有直接关系了，它们都只是受到天气的影响。</p>
+</blockquote>
+<p>**局部马尔科夫性：**对于一个更一般的贝叶斯网络，其局部马尔科夫性质为：每个随机变量在给定父节点的情况下，条件独立于它的后代节点。</p>
+<p><strong>常见的有向图模型</strong>：很多经典的机器学习模型可以使用有向图模型来描述，比如朴素贝叶斯分 类器、隐马尔可夫模型、深度信念网络等。</p>
+<p><strong>sigmoid信念网络</strong>：为了减少模型参数，可以使用参数化模型来建模有向图模型中的条件概率分布，而sigmoid信念网络是一种简单的参数化模型。sigmoid中的变量取值为${0,1}$，对于变量$X_k$，和它的父节点集合$\pi_k$，其条件概率分布表示为:<br>$$<br>p(x_k = 1|\mathbf{x}<em>{\pi_k}, \theta) = \sigma(\theta_0 + \sum</em>{x_i \in \mathbf{x}_{\pi_k}} \theta_i x_i),<br>$$<br>其中$\theta$为可以学习的参数，$\sigma$是Logistic函数，假设变量$X_k$的父节点数量为$M$，使用表格的参数为$2^M$而使用sigmoid信念网络只需要$M+1$个参数。值得一提的是，Sigmoid信念网络与Logistic回归模型都采用Logistic函数来计算条件概率．如果假设Sigmoid信念网络中只有一个叶子节点，其所有的父节点之间没有连接，且取值为实数，那么Sigmoid信念网络的网络结构和Logistic回归模型类似。但是，这两个模型的区别在于，Logistic回归模型中的$𝒙$作为一种确定性的参数，而非变量． 因此，Logistic回归模型只建模条件概率$𝑝(𝑦|𝒙)$，是一种判别模型；而Sigmoid信念网络建模联合概率$𝑝(𝒙,𝑦)$，是一 种生成模型．</p>
+<p><strong>朴素贝叶斯分类器</strong>：其是一种简单的概率分类器，在</p>
+<p><strong>学习准则</strong>：经验风险最小化，结构风险最小化，最大似然估计，最大后验估计</p>
+<p><strong>最小二乘与最小均方</strong>：由于线性回归的风险函数是凸的因此可以直接求解解析解，但是如果$XX^T$不可逆，可以使用梯度下降求解这种方式叫最小均方</p>
+<p><strong>最大后验估计和最大先验估计</strong>：可以分别看作频率学派和贝叶斯学派对需要估计的参数$w$的不同解释。</p>
+<p><strong>偏差-方差分解</strong>：可以分解如下：<br>$$<br>\mathcal{R}(f) = \mathbb{E}<em>{(x,y)\sim p_r(x,y)}\left[\left(y-f^<em>(x)+f^</em>(x)-f(x)\right)^2\right]<br>= \mathbb{E}</em>{x\sim p_r(x)}\left[\left(f(x)-f^*(x)\right)^2\right] + \varepsilon<br>$$<br>其中第一项是当前模型和最优模型之间的差距是机器学习算法可以优化的真实目标（分解的关键是中间项的期望为0）</p>
+<p>$l_1$<strong>正则化</strong>：$l_1$正则化由于会导致稀疏特征，因此间接实现了特征选择</p>
+<h2 id="线性模型"><a href="#线性模型" class="headerlink" title="线性模型"></a>线性模型</h2><p>线性分类模型由一个线性判别函数和一个非线性函数组成，所有满足线性判别函数的值组成一个分割超平面，称为决策边界或决策平面，决策边界将特征空间一分为二，划分为两个区域，每个区域对应于一个类别（二分类）</p>
+]]></content>
+      <categories>
+        <category>学习</category>
+        <category>计算机相关</category>
+      </categories>
+      <tags>
+        <tag>机器学习</tag>
+        <tag>人工智能</tag>
+        <tag>概率图模型</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>概率论学习</title>
+    <url>/posts/c3185712/</url>
+    <content><![CDATA[<blockquote class="blockquote-center">概率论只不过是把常识归纳为计算问题．
+——皮埃尔-西蒙·拉普拉斯（Pierre-SimonLaplace）</blockquote>
+## 学习起因
+
+<p>学diffusion model的时候看不太懂公式，发现我学概率论已经是大二2021年的事情了，基本上忘了个精光，故重新学习。此外我发现一个有趣的网站（<a href="https://probability.visualized.fun/">看见概率论 - 通过交互式演示理解经典概率论定理</a>）因此开个新贴，学习一下。</p>
+<h2 id="大数定理：概率的收敛之美"><a href="#大数定理：概率的收敛之美" class="headerlink" title="大数定理：概率的收敛之美"></a>大数定理：概率的收敛之美</h2><blockquote>
+<p>*”人生就像一场大数定理实验，重要的不是单次的成败，而是坚持到收敛的那一刻。 记住 ——<strong>样本量不够，就往死里试！</strong>“*</p>
+</blockquote>
+<h3 id="1-核心思想"><a href="#1-核心思想" class="headerlink" title="1.核心思想"></a>1.核心思想</h3><p>大数定理告诉我们：随着试验次数的增加，样本的平均值会越来越接近理论期望值。<br>$$<br>样本均值 → 理论期望值（当n→∞）<br>$$</p>
+<ul>
+<li>试验次数较少时，平均值波动较大</li>
+<li>随着次数增加，平均值会稳定在期望值附近</li>
+<li>这种收敛性为统计推断提供了理论基础</li>
+</ul>
+<p>特点：</p>
+<ol>
+<li>随机性，每次试验的结果都是随机的，无法准确预测</li>
+<li>独立性，每次试验相互独立，不受之前的结果影响</li>
+<li>收敛性，大量重复之后，平均值趋近于理论期望值</li>
+</ol>
+<h3 id="2-实验"><a href="#2-实验" class="headerlink" title="2. 实验"></a>2. 实验</h3><p>看见概率论中准备了三个实验，分别为骰子实验，硬币实验，随机抽样</p>
+<ul>
+<li><h4 id="骰子实验"><a href="#骰子实验" class="headerlink" title="骰子实验"></a>骰子实验</h4><p>实验目标：</p>
+<ol>
+<li>验证多次投掷骰子的平均值会收敛到3.5 (1+2+3+4+5+6)/6</li>
+<li>观察收敛速度与试验次数的关系</li>
+<li>理解随机事件的独立性原理</li>
+</ol>
+<p>观察重点：</p>
+<ol>
+<li>绿色线表示每次投掷的实际点数</li>
+<li>蓝色线表示到目前为止的平均值</li>
+<li>红色虚线表示理论期望值3.5</li>
+</ol>
+<p>预期现象</p>
+<ol>
+<li>开始时平均值（蓝线）波动较大</li>
+<li>随着投掷次数增加，平均值会逐渐靠近3.5</li>
+<li>单次投掷（绿线）始终在1-6之间随机波动</li>
+</ol>
+<p>实验现象</p>
+<p>当试验次数为10：</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241130230622385.png" alt="image-20241130230622385"></p>
+<p>当试验次数为100：</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241130230701406.png" alt="image-20241130230701406"></p>
+<p>当试验次数为1000</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241130230747132.png" alt="image-20241130230747132"></p>
+<p><strong>实验结论</strong>：</p>
+<ul>
+<li>单次投掷结果完全随机，但大量重复后会呈现稳定规律</li>
+<li>试验次数越多，平均值越接近理论期望值3.5</li>
+<li>这种收敛性质正是大数定理的完美体现</li>
+</ul>
+<p><strong>启示思考</strong>：</p>
+<ul>
+<li>统计规律需要大量样本才能显现</li>
+<li>小样本的结果可能会产生较大偏差</li>
+<li>概率不能预测单次结果，但能预测长期表现</li>
+</ul>
+</li>
+</ul>
+<h2 id="贝叶斯定理：概率推理的艺术"><a href="#贝叶斯定理：概率推理的艺术" class="headerlink" title="贝叶斯定理：概率推理的艺术"></a>贝叶斯定理：概率推理的艺术</h2><blockquote>
+<p>*”人生就像一场贝叶斯更新，每一条新信息都是一次概率革命。不过最重要的是 ——<strong>先验概率不重要，重要的是不断更新！</strong>“*</p>
+</blockquote>
+<h3 id="1-核心思想-1"><a href="#1-核心思想-1" class="headerlink" title="1.核心思想"></a>1.核心思想</h3><p>贝叶斯定理帮助我们在获得新信息后更新判断。它告诉我们如何根据新的观察结果， 科学地调整我们对某件事的认知。</p>
+<p>贝叶斯公式：<br>$$<br>P(A|B) = P(B|A) × P(A) ÷ P(B)<br>$$</p>
+<p>已知变量：</p>
+<ul>
+<li>P(A) - 先验概率：在获得新证据前的初始判断</li>
+<li>P(B|A) - 似然度：在A发生的条件下，观察到B的概率</li>
+<li>P(B|¬A) - 似然度：在A不发生的条件下，观察到B的概率</li>
+</ul>
+<p>需要计算的变量：</p>
+<ul>
+<li><p>P(B) - 全概率：观察到B的总概率</p>
+<p>= P(A) × P(B|A) + P(¬A) × P(B|¬A)</p>
+</li>
+<li><p>P(A|B) - 后验概率：观察到B后，对A的更新判断</p>
+<p>= P(B|A) × P(A) ÷ P(B)</p>
+</li>
+</ul>
+<ol>
+<li>先验概率</li>
+</ol>
+<p>在获得新证据之前，基于已有经验和背景信息的初始判断</p>
+<ol start="2">
+<li>似然程度</li>
+</ol>
+<p>新观察到的证据对不同假设的支持程度</p>
+<ol start="3">
+<li>后验概率</li>
+</ol>
+<p>结合新证据后得出的更新判断</p>
+<h3 id="2-实验-1"><a href="#2-实验-1" class="headerlink" title="2.实验"></a>2.实验</h3><p>下雨概率：<br>$$<br>P(下雨|地面湿) = P(地面湿|下雨) × P(下雨) ÷ P(地面湿)<br>$$<br>已知变量：</p>
+<ul>
+<li>P(下雨) - 先验概率 P(R)<ul>
+<li>• 来源：根据天气预报、季节特征等预判</li>
+<li>• 含义：在观察地面之前对是否下雨的判断</li>
+</ul>
+</li>
+<li>P(地面湿|下雨) - 似然度 P(W|R)<ul>
+<li>• 来源：经验数据或实地观测</li>
+<li>• 含义：在下雨的情况下，地面变湿的概率</li>
+</ul>
+</li>
+<li>P(地面湿|不下雨) - 似然度 P(W|¬R)<ul>
+<li>• 来源：经验数据或实地观测</li>
+<li>• 含义：在不下雨的情况下，地面变湿的概率（如清洁、洒水等）</li>
+</ul>
+</li>
+</ul>
+<p>需要计算的变量：</p>
+<ul>
+<li>P(地面湿) - 标准化常数 P(W)<ul>
+<li>• 通过全概率公式计算：P(W) = P(R) × P(W|R) + P(¬R) × P(W|¬R)</li>
+<li>• 含义：地面变湿的总概率，包括下雨和不下雨两种情况</li>
+</ul>
+</li>
+<li>P(下雨|地面湿) - 后验概率 P(R|W)<ul>
+<li>• 最终目标：通过贝叶斯公式计算</li>
+<li>• 含义：观察到地面湿润后，对下雨概率的更新判断</li>
+</ul>
+</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241130233452258.png" alt="image-20241130233452258"></p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241130233505405.png" alt="image-20241130233505405"></p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241130233516515.png" alt="image-20241130233516515"></p>
+<p>也就是说贝叶斯公式是通过证据来更新先验概率。第一次弄懂了具体含义。。。</p>
+<p>如果新来的证据的似然度都一样的话，那这个证据是完全无用的，也就是不会更新概率。</p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241130233652239.png" alt="image-20241130233652239"></p>
+<p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/dataimage-20241130233747460.png" alt="image-20241130233747460"></p>
+]]></content>
+      <categories>
+        <category>学习</category>
+        <category>数学</category>
+      </categories>
+      <tags>
+        <tag>学习</tag>
+        <tag>数学</tag>
+        <tag>概率论</tag>
+      </tags>
+  </entry>
+</search>
