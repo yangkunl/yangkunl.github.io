@@ -450,12 +450,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 .container {
-  max-width: 800px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 0 20px;
 }
 .outer {
-  max-width: 800px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 0 20px;
 }
@@ -587,7 +587,7 @@ hr {
   margin: 2em 0;
 }
 #main {
-  max-width: 800px;
+  max-width: 1100px;
   margin: 40px auto;
   padding: 40px;
   background: #fff;
@@ -661,6 +661,40 @@ html[data-theme="dark"] .subtitle {
   color: #bbb !important;
   font-style: italic !important;
 }
+html[data-theme="dark"] #main-nav a,
+html[data-theme="dark"] .main-nav-link {
+  color: #e0e0e0 !important;
+}
+html[data-theme="dark"] #main-nav a:hover,
+html[data-theme="dark"] .main-nav-link:hover {
+  color: #fff !important;
+}
+html[data-theme="dark"] .nav-icon {
+  color: #e0e0e0 !important;
+}
+html[data-theme="dark"] .post-title,
+html[data-theme="dark"] .article-title {
+  color: #fff !important;
+}
+html[data-theme="dark"] .post-title a,
+html[data-theme="dark"] .article-title a {
+  color: #fff !important;
+}
+html[data-theme="dark"] .post-title a:hover,
+html[data-theme="dark"] .article-title a:hover {
+  color: #d4c4b4 !important;
+}
+html[data-theme="dark"] .post-excerpt,
+html[data-theme="dark"] .post-excerpt p,
+html[data-theme="dark"] .article-entry,
+html[data-theme="dark"] .article-entry p {
+  color: #ccc !important;
+}
+html[data-theme="dark"] .article-meta,
+html[data-theme="dark"] .post-meta,
+html[data-theme="dark"] .article-tag-list-link {
+  color: #999 !important;
+}
 html[data-theme="dark"] blockquote {
   background: rgba(184,169,154,0.1);
   border-left: 4px solid #b8a99a;
@@ -710,4 +744,21 @@ html[data-theme="dark"] #footer #footer-info a {
 }
 html[data-theme="dark"] #footer #footer-info a:hover {
   color: #d4c4b4 !important;
+}
+.article-entry .highlight {
+  display: block !important;
+  overflow-x: auto !important; /* Force scrollbar */
+  width: 100% !important;
+  background: #f6f6f4;
+}
+.article-entry .highlight table {
+  table-layout: fixed; /* Prevent table from forcing width */
+  width: 100%;
+  display: block; /* Make table scrollable if needed */
+}
+/* Hide the gutter (line numbers) on mobile if it causes issues */
+@media (max-width: 767px) {
+  .article-entry .highlight .gutter {
+    display: none;
+  }
 }

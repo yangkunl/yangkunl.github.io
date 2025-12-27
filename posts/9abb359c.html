@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+    <title>借云之手，驾驭本地算力：Google Colab 本地运行时配置指南 | 微光集</title>
+  
+  <meta name="description" content="一个文青风格的个人博客">
+  <meta name="keywords" content="生活,思考,随笔">
+  <meta name="author" content="Kunlin">
+
+  <!-- 字体 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+
+  
+<link rel="stylesheet" href="/css/style.css">
+
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+<body>
+
+  <header id="header">
+  <div class="header-inner">
+    <div class="logo-wrap">
+      <a href="/" class="logo">
+        <svg class="logo-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        微光集
+      </a>
+      <span class="subtitle">在黑夜的缝隙里，捕获一点亮</span>
+    </div>
+    <nav id="main-nav">
+      <a id="main-nav-toggle" class="nav-icon"></a>
+      <a class="main-nav-link" href="/">首页</a>
+      
+        <a class="main-nav-link" href="/archives">归档</a>
+      
+        <a class="main-nav-link" href="/categories">分类</a>
+      
+        <a class="main-nav-link" href="/tags">标签</a>
+      
+        <a class="main-nav-link" href="/about">关于</a>
+      
+      <button id="theme-toggle" class="theme-toggle" aria-label="切换主题">
+        <span class="theme-icon">🌙</span>
+      </button>
+    </nav>
+  </div>
+</header>
+
+
+  <div id="main">
+    <div class="outer">
+  <article class="article">
+    <div class="article-header">
+      <h1 class="article-title">借云之手，驾驭本地算力：Google Colab 本地运行时配置指南</h1>
+      <div class="article-meta">
+        
+          <span class="article-time">
+            <time datetime="2025-12-27">
+              2025-12-27
+            </time>
+          </span>
+        
+        
+          <span class="article-categories">
+            分类：
+            
+              
+              <a href="/categories/%E6%A0%BC%E7%89%A9/">格物</a>
+            
+          </span>
+        
+        
+          <span class="article-tags">
+            标签：
+            
+              
+              <a href="/tags/Colab/">#Colab</a>
+            
+              , 
+              <a href="/tags/Jupyter/">#Jupyter</a>
+            
+              , 
+              <a href="/tags/%E7%94%9F%E4%BA%A7%E5%8A%9B/">#生产力</a>
+            
+              , 
+              <a href="/tags/%E7%82%BC%E4%B8%B9%E6%9C%AF/">#炼丹术</a>
+            
+          </span>
+        
+      </div>
+    </div>
+
+    <div class="article-content">
+      <p>在深度学习的探索之路上，Google Colab 无疑是一扇慷慨的窗，让我们得以免费窥探 GPU 加速的风景。但云端虽好，有时却难免受限于网络波动、存储空间或是那令人捉摸不透的资源分配策略。</p>
+<p>有没有一种可能，既能享受 Colab 那优雅流畅的 Notebook 交互界面，又能直接调用我手边这台“猛兽”的本地显卡与数据？</p>
+<p>答案是肯定的。通过**本地运行时 (Local Runtime)**，我们可以打通云端与土库的任督二脉。</p>
+<h2 id="为什么需要本地运行时？"><a href="#为什么需要本地运行时？" class="headerlink" title="为什么需要本地运行时？"></a>为什么需要本地运行时？</h2><p>通常我们使用 Colab，是用它的界面控制它在 Google 服务器上的虚拟机。而“本地运行时”则是让 Colab 的网页前端，通过 WebSocket 协议连接到你本地电脑上运行的 Jupyter Server。</p>
+<p><strong>这样做的好处显而易见：</strong></p>
+<ol>
+<li><strong>算力自由</strong>：直接使用你本地的 GPU（RTX 3090&#x2F;4090 等），不再受限于 Colab 的分配。</li>
+<li><strong>数据无忧</strong>：直接读取本地硬盘的数据集，无需费时费力地上传到 Google Drive。</li>
+<li><strong>环境可控</strong>：使用你本地配置好的 Conda 环境，缺什么包直接 <code>pip</code>，不用每次重连都重新安装。</li>
+</ol>
+<hr>
+<h2 id="配置步骤：搭建云与端的桥梁"><a href="#配置步骤：搭建云与端的桥梁" class="headerlink" title="配置步骤：搭建云与端的桥梁"></a>配置步骤：搭建云与端的桥梁</h2><h3 id="1-基础环境准备"><a href="#1-基础环境准备" class="headerlink" title="1. 基础环境准备"></a>1. 基础环境准备</h3><p>首先，确保你的本地环境中已经安装了 Jupyter。打开你的终端（Terminal 或 CMD），输入：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pip install jupyter</span><br></pre></td></tr></table></figure>
+
+<h3 id="2-安装通信扩展"><a href="#2-安装通信扩展" class="headerlink" title="2. 安装通信扩展"></a>2. 安装通信扩展</h3><p>为了让 Colab 能够通过 WebSocket 与本地服务通信，我们需要安装一个专门的扩展插件。</p>
+<p>Bash</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"># 安装 HTTP-over-WebSocket 扩展</span><br><span class="line">pip install jupyter_http_over_ws</span><br><span class="line"></span><br><span class="line"># 启用扩展 (对于旧版本 jupyter)</span><br><span class="line">jupyter serverextension enable --py jupyter_http_over_ws</span><br><span class="line"></span><br><span class="line"># 注意：如果你使用的是较新的 jupyter-server (例如 Python 3.11 Windows 环境)</span><br><span class="line"># 请尝试使用以下命令：</span><br><span class="line"># jupyter-server extension enable --py jupyter_http_over_ws</span><br></pre></td></tr></table></figure>
+
+<h3 id="3-启动“开放”的-Jupyter-服务器"><a href="#3-启动“开放”的-Jupyter-服务器" class="headerlink" title="3. 启动“开放”的 Jupyter 服务器"></a>3. 启动“开放”的 Jupyter 服务器</h3><p>这是最关键的一步。我们需要启动一个允许跨域请求（CORS）的 Jupyter 服务，专门等待来自 Google Colab 的连接。</p>
+<p>在终端中运行以下长指令：</p>
+<p>Bash</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">jupyter notebook \</span><br><span class="line">  --NotebookApp.allow_origin=&#x27;[https://colab.research.google.com](https://colab.research.google.com)&#x27; \</span><br><span class="line">  --port=8888 \</span><br><span class="line">  --NotebookApp.port_retries=0 \</span><br><span class="line">  --NotebookApp.allow_credentials=True</span><br></pre></td></tr></table></figure>
+
+<p><strong>🔮 运行成功后：</strong> 终端会输出一连串日志，请找到其中包含 Token 的 URL，它长得像这样： <code>http://localhost:8888/?token=abcdef123456...</code></p>
+<p><strong>请复制这个 URL，这是连接的密钥。</strong></p>
+<h3 id="4-在-Colab-中完成对接"><a href="#4-在-Colab-中完成对接" class="headerlink" title="4. 在 Colab 中完成对接"></a>4. 在 Colab 中完成对接</h3><p>回到浏览器，打开你的 Google Colab 笔记本：</p>
+<ol>
+<li>点击右上角的 <strong>连接 (Connect)</strong> 按钮旁边的倒三角下拉箭头。</li>
+<li>选择 **连接到本地运行时 (Connect to local runtime)**。</li>
+<li>在弹出的对话框中，粘贴刚才复制的 <strong>本地后端 URL</strong>。</li>
+<li>点击 <strong>连接</strong>。</li>
+</ol>
+<p>当状态栏变为绿色的“已连接”时，恭喜你，你的 Colab 已经“降临”到了本地。</p>
+<hr>
+<h2 id="📝-重要的“避坑”指南"><a href="#📝-重要的“避坑”指南" class="headerlink" title="📝 重要的“避坑”指南"></a>📝 重要的“避坑”指南</h2><p>在享受便利的同时，有几点必须铭记于心：</p>
+<ol>
+<li><strong>主要路径</strong>：Colab 文件浏览区看到的“根目录”，实际上就是你在终端输入 <code>jupyter notebook</code> 命令时<strong>所在的文件夹</strong>。建议在项目根目录下启动命令。</li>
+<li><strong>环境一致性</strong>：此时代码运行在你本地的 Python 环境中。如果你在 Colab 单元格里运行 <code>!pip install xxx</code>，它实际上是安装到了你的本地电脑里。</li>
+<li><strong>隐私安全</strong>：虽然我们信任 Google，但请注意不要将此 URL 泄露给他人，拥有此 Token 意味着拥有你本地电脑的代码执行权限。</li>
+</ol>
+
+    </div>
+
+    
+      <footer class="article-footer">
+        <div class="article-tags">
+          
+            <a class="tag" href="/tags/Colab/">#Colab</a>
+          
+            <a class="tag" href="/tags/Jupyter/">#Jupyter</a>
+          
+            <a class="tag" href="/tags/%E7%94%9F%E4%BA%A7%E5%8A%9B/">#生产力</a>
+          
+            <a class="tag" href="/tags/%E7%82%BC%E4%B8%B9%E6%9C%AF/">#炼丹术</a>
+          
+        </div>
+      </footer>
+    
+  </article>
+
+  
+    
+
+  
+</div>
+
+  </div>
+
+  <footer id="footer">
+  <div class="outer">
+    <div id="footer-info">
+      <div class="footer-left">
+        &copy; 2025 Kunlin. 保留所有权利
+      </div>
+      <div class="footer-right">
+        <a href="https://yourusername.github.io">主页</a> |
+        <a href="https://yourusername.github.io/archives">文章</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+  <script>
+    // 移动端导航切换
+    const navToggle = document.getElementById('main-nav-toggle');
+    const mainNav = document.getElementById('main-nav');
+
+    if (navToggle) {
+      navToggle.addEventListener('click', () => {
+        mainNav.classList.toggle('show');
+      });
+    }
+
+    // 平滑滚动
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const href = this.getAttribute('href');
+        if (href !== '#') {
+          e.preventDefault();
+          const target = document.querySelector(href);
+          if (target) {
+            target.scrollIntoView({
+              behavior: 'smooth'
+            });
+          }
+        }
+      });
+    });
+  </script>
+
+  
+<script src="/js/theme-toggle.js"></script>
+
+
+
+  
+
+</body>
+</html>
