@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+    <title>分类 | 微光集</title>
+  
+  <meta name="description" content="一个文青风格的个人博客">
+  <meta name="keywords" content="生活,思考,随笔">
+  <meta name="author" content="Kunlin">
+
+  <!-- 字体 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+
+  
+<link rel="stylesheet" href="/css/style.css">
+
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+<body>
+
+  <header id="header">
+  <div class="header-inner">
+    <div class="logo-wrap">
+      <a href="/" class="logo">
+        <svg class="logo-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        微光集
+      </a>
+      <span class="subtitle">在黑夜的缝隙里，捕获一点亮</span>
+    </div>
+    <nav id="main-nav">
+      <a id="main-nav-toggle" class="nav-icon"></a>
+      <a class="main-nav-link" href="/">首页</a>
+      
+        <a class="main-nav-link" href="/archives">归档</a>
+      
+        <a class="main-nav-link" href="/categories">分类</a>
+      
+        <a class="main-nav-link" href="/tags">标签</a>
+      
+        <a class="main-nav-link" href="/about">关于</a>
+      
+      <button id="theme-toggle" class="theme-toggle" aria-label="切换主题">
+        <span class="theme-icon">🌙</span>
+      </button>
+    </nav>
+  </div>
+</header>
+
+
+  <div id="main">
+    <div class="outer">
+  <article class="article">
+    <div class="article-header">
+      <h1 class="article-title">分类</h1>
+      <div class="article-meta">
+        
+          <span class="article-time">
+            <time datetime="2025-12-26">
+              2025-12-26
+            </time>
+          </span>
+        
+        
+        
+      </div>
+    </div>
+
+    <div class="article-content">
+      
+    </div>
+
+    
+  </article>
+
+  
+</div>
+
+  </div>
+
+  <footer id="footer">
+  <div class="outer">
+    <div id="footer-info">
+      <div class="footer-left">
+        &copy; 2025 Kunlin. 保留所有权利
+      </div>
+      <div class="footer-right">
+        <a href="https://yourusername.github.io">主页</a> |
+        <a href="https://yourusername.github.io/archives">文章</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+  <script>
+    // 移动端导航切换
+    const navToggle = document.getElementById('main-nav-toggle');
+    const mainNav = document.getElementById('main-nav');
+
+    if (navToggle) {
+      navToggle.addEventListener('click', () => {
+        mainNav.classList.toggle('show');
+      });
+    }
+
+    // 平滑滚动
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const href = this.getAttribute('href');
+        if (href !== '#') {
+          e.preventDefault();
+          const target = document.querySelector(href);
+          if (target) {
+            target.scrollIntoView({
+              behavior: 'smooth'
+            });
+          }
+        }
+      });
+    });
+  </script>
+
+  
+<script src="/js/theme-toggle.js"></script>
+
+
+
+  
+
+</body>
+</html>
