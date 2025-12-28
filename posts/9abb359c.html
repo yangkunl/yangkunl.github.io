@@ -98,7 +98,8 @@
     </div>
 
     <div class="article-content">
-      <p>在深度学习的探索之路上，Google Colab 无疑是一扇慷慨的窗，让我们得以免费窥探 GPU 加速的风景。但云端虽好，有时却难免受限于网络波动、存储空间或是那令人捉摸不透的资源分配策略。</p>
+      <p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/img/202512271400111.png" alt="download"></p>
+<p>在深度学习的探索之路上，Google Colab 无疑是一扇慷慨的窗，让我们得以免费窥探 GPU 加速的风景。但云端虽好，有时却难免受限于网络波动、存储空间或是那令人捉摸不透的资源分配策略。</p>
 <p>有没有一种可能，既能享受 Colab 那优雅流畅的 Notebook 交互界面，又能直接调用我手边这台“猛兽”的本地显卡与数据？</p>
 <p>答案是肯定的。通过**本地运行时 (Local Runtime)**，我们可以打通云端与土库的任督二脉。</p>
 <h2 id="为什么需要本地运行时？"><a href="#为什么需要本地运行时？" class="headerlink" title="为什么需要本地运行时？"></a>为什么需要本地运行时？</h2><p>通常我们使用 Colab，是用它的界面控制它在 Google 服务器上的虚拟机。而“本地运行时”则是让 Colab 的网页前端，通过 WebSocket 协议连接到你本地电脑上运行的 Jupyter Server。</p>
