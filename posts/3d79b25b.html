@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+    <title>nn.Linear和实际初始化的Weight尺寸是相反的 | 微光集</title>
+  
+  <meta name="description" content="一个文青风格的个人博客">
+  <meta name="keywords" content="生活,思考,随笔">
+  <meta name="author" content="Kunlin">
+
+  <!-- 字体 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+
+  
+<link rel="stylesheet" href="/css/style.css">
+
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+<body>
+
+  <header id="header">
+  <div class="header-inner">
+    <div class="logo-wrap">
+      <a href="/" class="logo">
+        <svg class="logo-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        微光集
+      </a>
+      <span class="subtitle">在黑夜的缝隙里，捕获一点亮</span>
+    </div>
+    <nav id="main-nav">
+      <a id="main-nav-toggle" class="nav-icon"></a>
+      <a class="main-nav-link" href="/">首页</a>
+      
+        <a class="main-nav-link" href="/archives">归档</a>
+      
+        <a class="main-nav-link" href="/categories">分类</a>
+      
+        <a class="main-nav-link" href="/tags">标签</a>
+      
+        <a class="main-nav-link" href="/about">关于</a>
+      
+      <button id="theme-toggle" class="theme-toggle" aria-label="切换主题">
+        <span class="theme-icon">🌙</span>
+      </button>
+    </nav>
+  </div>
+</header>
+
+
+  <div id="main">
+    <div class="outer">
+  <article class="article">
+    <div class="article-header">
+      <h1 class="article-title">nn.Linear和实际初始化的Weight尺寸是相反的</h1>
+      <div class="article-meta">
+        
+          <span class="article-time">
+            <time datetime="2026-01-09">
+              2026-01-09
+            </time>
+          </span>
+        
+        
+          <span class="article-categories">
+            分类：
+            
+              
+              <a href="/categories/%E6%A0%BC%E7%89%A9/">格物</a>
+            
+          </span>
+        
+        
+          <span class="article-tags">
+            标签：
+            
+              
+              <a href="/tags/PyTorch/">#PyTorch</a>
+            
+          </span>
+        
+      </div>
+    </div>
+
+    <div class="article-content">
+      <p>最近在手撕Lora的代码的时候，发现一个有趣的现象。手撕代码如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">LoRAModule</span>(nn.Moudle):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, original_layer, lora_rank=<span class="number">4</span></span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.original_layer = original_layer</span><br><span class="line">        <span class="variable language_">self</span>.lora_down = nn.Linear(original_layer.in_features, lora_rank, bias=<span class="literal">False</span>)</span><br><span class="line">        <span class="variable language_">self</span>.lora_up = nn.Linear(lora_rank, original_layer.out_features, bias=<span class="literal">False</span>)</span><br><span class="line"></span><br><span class="line">        <span class="comment"># Initialize weights</span></span><br><span class="line">        nn.init.normal_(<span class="variable language_">self</span>.lora_down.weight, std=<span class="number">0.02</span>)</span><br><span class="line">        nn.init.zeros_(<span class="variable language_">self</span>.lora_up.weight)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, x</span>):</span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.original_layer + <span class="variable language_">self</span>.lora_up(<span class="variable language_">self</span>.lora_down(x))</span><br><span class="line">   </span><br></pre></td></tr></table></figure>
+
+<p>其中<code>lora_down</code>的初始化是<code>nn.Linear(original_layer.in_features, lora_rank)</code>，其中<code>original_layer.in_features</code>即我们添加lora的层的输入的dim。而lora_up的初始化是<code>nn.Linear(lora_rank, original_layer.out_features, bias=False)</code>，这样看好像是没有问题的, 因为lora计算的公式如下：<br>$$<br>out &#x3D; \text{Orignal_layer}(X) + BA(X)<br>$$<br>但是实际上我很快发现一个问题，其中$B$是<code>lora_up</code>， $A$是<code>lora_down</code>，那么$BA$的实际shape不是是$[\text{rank}, \text{out}]@[\text{input}, \text{rank}]$，根本乘不了呀！！但是代码实际上是没有问题的，原因如标题所示：<code>nn.Linear(in_features, out_features)</code> 的参数是<code>weight.shape == (out_features, in_features)</code>， 这么一来就说的通了，BA实际上是$[\text{out}, \text{rank}]@[\text{rank}, \text{input}]$。仔细一查，根本原因是PyTorch中线性层<code> forward</code> 计算本质是：<br>$$<br>y &#x3D; x W^\top + b<br>$$<br>所以$BA（X）$实际上是$ X@（BA）^\top $即 $XA^\top B^\top$。</p>
+
+    </div>
+
+    
+      <footer class="article-footer">
+        <div class="article-tags">
+          
+            <a class="tag" href="/tags/PyTorch/">#PyTorch</a>
+          
+        </div>
+      </footer>
+    
+  </article>
+
+  
+    
+
+  
+</div>
+
+  </div>
+
+  <footer id="footer">
+  <div class="outer">
+    <div id="footer-info">
+      <div class="footer-left">
+        &copy; 2026 Kunlin. 保留所有权利
+        <br>
+        <span id="busuanzi_container_site_pv" style="font-family: 'Georgia', serif; font-size: 0.9em; color: #666;">
+          &nbsp;Readers: <span id="busuanzi_value_site_uv" style="color: #b73229;"></span>
+          &nbsp;|&nbsp;
+          Views: <span id="busuanzi_value_site_pv" style="color: #b73229;"></span>
+        </span>
+        <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+      </div>
+      <div class="footer-right">
+        <a href="https://yangkunlin.cn">主页</a> |
+        <a href="https://yangkunlin.cn/archives">文章</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+  <script>
+    // 移动端导航切换
+    const navToggle = document.getElementById('main-nav-toggle');
+    const mainNav = document.getElementById('main-nav');
+
+    if (navToggle) {
+      navToggle.addEventListener('click', () => {
+        mainNav.classList.toggle('show');
+      });
+    }
+
+    // 平滑滚动
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const href = this.getAttribute('href');
+        if (href !== '#') {
+          e.preventDefault();
+          const target = document.querySelector(href);
+          if (target) {
+            target.scrollIntoView({
+              behavior: 'smooth'
+            });
+          }
+        }
+      });
+    });
+  </script>
+
+  
+<script src="/js/theme-toggle.js"></script>
+
+
+
+  
+
+</body>
+</html>
