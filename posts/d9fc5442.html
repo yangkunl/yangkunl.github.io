@@ -106,59 +106,60 @@
 <li><strong>订阅转换工具</strong>：<a target="_blank" rel="noopener" href="https://acl4ssr-sub.github.io/">ACL4SSR Sub Converter</a> （用于将普通机场订阅转换为 Clash 格式）</li>
 </ul>
 <h3 id="2-Shell-文件操作的“薛定谔”陷阱"><a href="#2-Shell-文件操作的“薛定谔”陷阱" class="headerlink" title="2. Shell 文件操作的“薛定谔”陷阱"></a>2. Shell 文件操作的“薛定谔”陷阱</h3><p>在 Linux 中使用 <code>cp</code> 命令时，目标路径的状态直接决定了结果。这是一个新手（甚至老手）常犯的错误：</p>
+<div class="table-container">
 <table>
 <thead>
 <tr>
-<th align="left">目标 (Target) 状态</th>
-<th align="left">命令示例</th>
-<th align="left">执行结果</th>
-<th align="left">你的意图</th>
-<th align="left">结果判定</th>
+<th style="text-align:left">目标 (Target) 状态</th>
+<th style="text-align:left">命令示例</th>
+<th style="text-align:left">执行结果</th>
+<th style="text-align:left">你的意图</th>
+<th style="text-align:left">结果判定</th>
 </tr>
 </thead>
-<tbody><tr>
-<td align="left"><strong>不存在</strong></td>
-<td align="left"><code>cp file1 file2</code></td>
-<td align="left"><code>file1</code> 被<strong>重命名</strong>为 <code>file2</code></td>
-<td align="left">✅ 文件重命名</td>
-<td align="left">符合预期</td>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>不存在</strong></td>
+<td style="text-align:left"><code>cp file1 file2</code></td>
+<td style="text-align:left"><code>file1</code> 被<strong>重命名</strong>为 <code>file2</code></td>
+<td style="text-align:left">✅ 文件重命名</td>
+<td style="text-align:left">符合预期</td>
 </tr>
 <tr>
-<td align="left"><strong>已存在 (文件)</strong></td>
-<td align="left"><code>cp file1 file2</code></td>
-<td align="left"><code>file1</code> 内容<strong>覆盖</strong> <code>file2</code></td>
-<td align="left">❌ 往往不想覆盖</td>
-<td align="left"><strong>危险操作</strong></td>
+<td style="text-align:left"><strong>已存在 (文件)</strong></td>
+<td style="text-align:left"><code>cp file1 file2</code></td>
+<td style="text-align:left"><code>file1</code> 内容<strong>覆盖</strong> <code>file2</code></td>
+<td style="text-align:left">❌ 往往不想覆盖</td>
+<td style="text-align:left"><strong>危险操作</strong></td>
 </tr>
 <tr>
-<td align="left"><strong>已存在 (目录)</strong></td>
-<td align="left"><code>cp file1 dirA/</code></td>
-<td align="left"><code>file1</code> 被<strong>复制到 <code>dirA</code> 内部</strong></td>
-<td align="left">❌ 易混淆点</td>
-<td align="left">创建了嵌套结构</td>
+<td style="text-align:left"><strong>已存在 (目录)</strong></td>
+<td style="text-align:left"><code>cp file1 dirA/</code></td>
+<td style="text-align:left"><code>file1</code> 被<strong>复制到 <code>dirA</code> 内部</strong></td>
+<td style="text-align:left">❌ 易混淆点</td>
+<td style="text-align:left">创建了嵌套结构</td>
 </tr>
-</tbody></table>
+</tbody>
+</table>
+</div>
 <hr>
 <h2 id="二、CUDA-与编译器环境管理"><a href="#二、CUDA-与编译器环境管理" class="headerlink" title="二、CUDA 与编译器环境管理"></a>二、CUDA 与编译器环境管理</h2><h3 id="1-临时切换-CUDA-版本"><a href="#1-临时切换-CUDA-版本" class="headerlink" title="1. 临时切换 CUDA 版本"></a>1. 临时切换 CUDA 版本</h3><p>当服务器安装了多个 CUDA 版本时，无需 Root 权限，可以通过环境变量临时切换：</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 设置环境变量</span></span><br><span class="line"><span class="built_in">export</span> CUDA_HOME=/usr/local/cuda-11.3  <span class="comment"># 修改为你需要的版本路径</span></span><br><span class="line"><span class="built_in">export</span> PATH=<span class="variable">$CUDA_HOME</span>/bin:<span class="variable">$PATH</span></span><br><span class="line"><span class="built_in">export</span> LD_LIBRARY_PATH=<span class="variable">$CUDA_HOME</span>/lib64:<span class="variable">$LD_LIBRARY_PATH</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 验证是否生效</span></span><br><span class="line">nvcc --version</span><br></pre></td></tr></table></figure>
-
 <h2 id="三、PyTorch-扩展编译避坑实录"><a href="#三、PyTorch-扩展编译避坑实录" class="headerlink" title="三、PyTorch 扩展编译避坑实录"></a>三、PyTorch 扩展编译避坑实录</h2><h3 id="案例-A：PyTorch-与系统-CUDA-版本不一致"><a href="#案例-A：PyTorch-与系统-CUDA-版本不一致" class="headerlink" title="案例 A：PyTorch 与系统 CUDA 版本不一致"></a>案例 A：PyTorch 与系统 CUDA 版本不一致</h3><p><strong>现象</strong>：系统 CUDA 为 11.3，但 <code>pip install torch</code> 默认安装了绑定 CUDA 11.7 的版本。编译 <code>torch-kdtree</code> 等自定义算子时报错。 <strong>原因</strong>：编译时使用了系统的 <code>nvcc</code> (11.3)，但链接时用了 PyTorch 自带的库 (11.7)，导致符号不匹配。</p>
 <p><strong>解决方案（推荐）</strong>：强制重装与系统 CUDA 一致的 PyTorch。</p>
 <p>Bash</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"># 1. 卸载当前版本</span><br><span class="line">pip uninstall torch torchvision torchaudio -y</span><br><span class="line"></span><br><span class="line"># 2. 强制指定版本安装 (注意：需指定 PyTorch 官方源以获取 cu113 版本)</span><br><span class="line">pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 \</span><br><span class="line">    -i [https://pypi.org/simple](https://pypi.org/simple) \</span><br><span class="line">    --extra-index-url [https://download.pytorch.org/whl/cu113](https://download.pytorch.org/whl/cu113)</span><br></pre></td></tr></table></figure>
-
 <h3 id="案例-B：Python-3-7-头文件缺失"><a href="#案例-B：Python-3-7-头文件缺失" class="headerlink" title="案例 B：Python 3.7 头文件缺失"></a>案例 B：Python 3.7 头文件缺失</h3><p><strong>报错</strong>：<code>fatal error: crypt.h: No such file or directory</code> <strong>原因</strong>：旧版 Python (3.7) 在新版 Linux (glibc 较高) 上缺少 <code>libxcrypt</code> 开发头文件。</p>
 <p><strong>解决方案</strong>：</p>
 <p>Bash</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"># 安装 libxcrypt 开发包</span><br><span class="line">mamba install -c conda-forge libxcrypt gcc_linux-64 gxx_linux-64</span><br><span class="line"></span><br><span class="line"># 关键：设置 CPATH 让编译器能找到 Conda 的 include 目录</span><br><span class="line">export CPATH=$CONDA_PREFIX/include:$CPATH</span><br><span class="line"></span><br><span class="line"># 重新编译</span><br><span class="line">pip install torch-kdtree</span><br></pre></td></tr></table></figure>
-
 <hr>
 <h2 id="四、格物：CUDA-链接的“李代桃僵”之术"><a href="#四、格物：CUDA-链接的“李代桃僵”之术" class="headerlink" title="四、格物：CUDA 链接的“李代桃僵”之术"></a>四、格物：CUDA 链接的“李代桃僵”之术</h2><p>在解决上述编译问题时，我发现了一个有趣的现象：当使用 Conda 环境的 GCC 编译 CUDA 扩展时，必须手动链接 <code>stubs</code> 目录下的 <code>libcuda.so</code>，而使用系统 GCC 时则不需要。</p>
 <p>这是为什么？</p>
 <h3 id="1-编译-vs-运行：菜单与上菜"><a href="#1-编译-vs-运行：菜单与上菜" class="headerlink" title="1. 编译 vs 运行：菜单与上菜"></a>1. 编译 vs 运行：菜单与上菜</h3><p>Linux 的动态链接机制将“编译时”和“运行时”分开了。</p>
 <ul>
-<li><strong>编译链接 (Build Time)<strong>：就像在餐厅</strong>看菜单点菜</strong>。编译器只需要确认“有这个函数名（符号）”即可，不需要函数的具体代码。</li>
-<li><strong>程序运行 (Run Time)<strong>：就像</strong>厨房端上真菜</strong>。程序运行时，加载器（Loader）会去系统目录加载真正的库文件。</li>
+<li><strong>编译链接 (Build Time)</strong>：就像在餐厅<strong>看菜单点菜</strong>。编译器只需要确认“有这个函数名（符号）”即可，不需要函数的具体代码。</li>
+<li><strong>程序运行 (Run Time)</strong>：就像<strong>厨房端上真菜</strong>。程序运行时，加载器（Loader）会去系统目录加载真正的库文件。</li>
 </ul>
 <h3 id="2-为什么要用-Stubs-桩文件-？"><a href="#2-为什么要用-Stubs-桩文件-？" class="headerlink" title="2. 为什么要用 Stubs (桩文件)？"></a>2. 为什么要用 Stubs (桩文件)？</h3><p>NVIDIA 在 CUDA Toolkit 中提供了一个 <code>lib64/stubs</code> 目录，里面放的是“假的” <code>libcuda.so</code>。它们只有函数名，没有实际代码。</p>
 <ul>

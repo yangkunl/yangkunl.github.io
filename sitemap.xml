@@ -2,33 +2,6 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   
   <url>
-    <loc>https://yangkunlin.cn/about/index.html</loc>
-    
-    <lastmod>2026-01-09</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://yangkunlin.cn/categories/index-1.html</loc>
-    
-    <lastmod>2026-01-09</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://yangkunlin.cn/categories/index.html</loc>
-    
-    <lastmod>2026-01-09</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
     <loc>https://yangkunlin.cn/posts/%E7%A4%BA%E4%BE%8B%E6%96%87%E7%AB%A0.html</loc>
     
     <lastmod>2026-01-09</lastmod>
@@ -75,6 +48,33 @@
   
   <url>
     <loc>https://yangkunlin.cn/posts/d9fc5442.html</loc>
+    
+    <lastmod>2026-01-09</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://yangkunlin.cn/about/index.html</loc>
+    
+    <lastmod>2026-01-09</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://yangkunlin.cn/categories/index-1.html</loc>
+    
+    <lastmod>2026-01-09</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://yangkunlin.cn/categories/index.html</loc>
     
     <lastmod>2026-01-09</lastmod>
     

@@ -101,33 +101,30 @@
       <p><img src="https://raw.githubusercontent.com/yangkunl/image_hosting/main/img/202512271400111.png" alt="download"></p>
 <p>在深度学习的探索之路上，Google Colab 无疑是一扇慷慨的窗，让我们得以免费窥探 GPU 加速的风景。但云端虽好，有时却难免受限于网络波动、存储空间或是那令人捉摸不透的资源分配策略。</p>
 <p>有没有一种可能，既能享受 Colab 那优雅流畅的 Notebook 交互界面，又能直接调用我手边这台“猛兽”的本地显卡与数据？</p>
-<p>答案是肯定的。通过**本地运行时 (Local Runtime)**，我们可以打通云端与土库的任督二脉。</p>
+<p>答案是肯定的。通过<strong>本地运行时 (Local Runtime)</strong>，我们可以打通云端与土库的任督二脉。</p>
 <h2 id="为什么需要本地运行时？"><a href="#为什么需要本地运行时？" class="headerlink" title="为什么需要本地运行时？"></a>为什么需要本地运行时？</h2><p>通常我们使用 Colab，是用它的界面控制它在 Google 服务器上的虚拟机。而“本地运行时”则是让 Colab 的网页前端，通过 WebSocket 协议连接到你本地电脑上运行的 Jupyter Server。</p>
 <p><strong>这样做的好处显而易见：</strong></p>
 <ol>
-<li><strong>算力自由</strong>：直接使用你本地的 GPU（RTX 3090&#x2F;4090 等），不再受限于 Colab 的分配。</li>
+<li><strong>算力自由</strong>：直接使用你本地的 GPU（RTX 3090/4090 等），不再受限于 Colab 的分配。</li>
 <li><strong>数据无忧</strong>：直接读取本地硬盘的数据集，无需费时费力地上传到 Google Drive。</li>
 <li><strong>环境可控</strong>：使用你本地配置好的 Conda 环境，缺什么包直接 <code>pip</code>，不用每次重连都重新安装。</li>
 </ol>
 <hr>
 <h2 id="配置步骤：搭建云与端的桥梁"><a href="#配置步骤：搭建云与端的桥梁" class="headerlink" title="配置步骤：搭建云与端的桥梁"></a>配置步骤：搭建云与端的桥梁</h2><h3 id="1-基础环境准备"><a href="#1-基础环境准备" class="headerlink" title="1. 基础环境准备"></a>1. 基础环境准备</h3><p>首先，确保你的本地环境中已经安装了 Jupyter。打开你的终端（Terminal 或 CMD），输入：</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pip install jupyter</span><br></pre></td></tr></table></figure>
-
 <h3 id="2-安装通信扩展"><a href="#2-安装通信扩展" class="headerlink" title="2. 安装通信扩展"></a>2. 安装通信扩展</h3><p>为了让 Colab 能够通过 WebSocket 与本地服务通信，我们需要安装一个专门的扩展插件。</p>
 <p>Bash</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"># 安装 HTTP-over-WebSocket 扩展</span><br><span class="line">pip install jupyter_http_over_ws</span><br><span class="line"></span><br><span class="line"># 启用扩展 (对于旧版本 jupyter)</span><br><span class="line">jupyter serverextension enable --py jupyter_http_over_ws</span><br><span class="line"></span><br><span class="line"># 注意：如果你使用的是较新的 jupyter-server (例如 Python 3.11 Windows 环境)</span><br><span class="line"># 请尝试使用以下命令：</span><br><span class="line"># jupyter-server extension enable --py jupyter_http_over_ws</span><br></pre></td></tr></table></figure>
-
 <h3 id="3-启动“开放”的-Jupyter-服务器"><a href="#3-启动“开放”的-Jupyter-服务器" class="headerlink" title="3. 启动“开放”的 Jupyter 服务器"></a>3. 启动“开放”的 Jupyter 服务器</h3><p>这是最关键的一步。我们需要启动一个允许跨域请求（CORS）的 Jupyter 服务，专门等待来自 Google Colab 的连接。</p>
 <p>在终端中运行以下长指令：</p>
 <p>Bash</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">jupyter notebook \</span><br><span class="line">  --NotebookApp.allow_origin=&#x27;[https://colab.research.google.com](https://colab.research.google.com)&#x27; \</span><br><span class="line">  --port=8888 \</span><br><span class="line">  --NotebookApp.port_retries=0 \</span><br><span class="line">  --NotebookApp.allow_credentials=True</span><br></pre></td></tr></table></figure>
-
 <p><strong>🔮 运行成功后：</strong> 终端会输出一连串日志，请找到其中包含 Token 的 URL，它长得像这样： <code>http://localhost:8888/?token=abcdef123456...</code></p>
 <p><strong>请复制这个 URL，这是连接的密钥。</strong></p>
 <h3 id="4-在-Colab-中完成对接"><a href="#4-在-Colab-中完成对接" class="headerlink" title="4. 在 Colab 中完成对接"></a>4. 在 Colab 中完成对接</h3><p>回到浏览器，打开你的 Google Colab 笔记本：</p>
 <ol>
 <li>点击右上角的 <strong>连接 (Connect)</strong> 按钮旁边的倒三角下拉箭头。</li>
-<li>选择 **连接到本地运行时 (Connect to local runtime)**。</li>
+<li>选择 <strong>连接到本地运行时 (Connect to local runtime)</strong>。</li>
 <li>在弹出的对话框中，粘贴刚才复制的 <strong>本地后端 URL</strong>。</li>
 <li>点击 <strong>连接</strong>。</li>
 </ol>
